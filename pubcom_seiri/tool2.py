@@ -80,10 +80,11 @@ def find_closest_to_center(cluster_indices: List[int], center: np.ndarray, embed
     closest_idx = -1
     
     for idx in cluster_indices:
-        dist = cosine(embeddings[idx], center)
-        if dist < min_distance:
-            min_distance = dist
-            closest_idx = idx
+        if idx < len(embeddings):
+            dist = cosine(embeddings[idx], center)
+            if dist < min_distance:
+                min_distance = dist
+                closest_idx = idx
     
     return closest_idx
 
@@ -93,10 +94,11 @@ def find_farthest_from_center(cluster_indices: List[int], center: np.ndarray, em
     farthest_idx = -1
     
     for idx in cluster_indices:
-        dist = cosine(embeddings[idx], center)
-        if dist > max_distance:
-            max_distance = dist
-            farthest_idx = idx
+        if idx < len(embeddings):
+            dist = cosine(embeddings[idx], center)
+            if dist > max_distance:
+                max_distance = dist
+                farthest_idx = idx
     
     return farthest_idx, max_distance
 
