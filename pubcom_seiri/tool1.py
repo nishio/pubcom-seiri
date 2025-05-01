@@ -160,6 +160,10 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         max_items = min(max_merges, len(distances))
     merges = []
     
+    cluster_contents = {}
+    for i in range(len(comments)):
+        cluster_contents[i] = [i]
+    
     sorted_indices = np.argsort(distances)
     sorted_children = children[sorted_indices]
     sorted_distances = distances[sorted_indices]
@@ -171,15 +175,55 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         if child1 < len(comments):
             text1 = comments[child1]
             id1 = child1
+            text1_info = None
         else:
-            text1 = f"Cluster #{child1 - len(comments)}"
+            cluster_indices = cluster_contents[child1]
+            cluster_size = len(cluster_indices)
+            
+            if cluster_size >= 2:
+                idx1, idx2, _ = find_farthest_pair(cluster_indices, np.array([comments[idx] for idx in cluster_indices]))
+                representative_idx = cluster_indices[idx1]
+                text1 = comments[representative_idx]
+                text1_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child1,
+                    'cluster_size': cluster_size
+                }
+            else:
+                representative_idx = cluster_indices[0]
+                text1 = comments[representative_idx]
+                text1_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child1,
+                    'cluster_size': cluster_size
+                }
             id1 = child1
             
         if child2 < len(comments):
             text2 = comments[child2]
             id2 = child2
+            text2_info = None
         else:
-            text2 = f"Cluster #{child2 - len(comments)}"
+            cluster_indices = cluster_contents[child2]
+            cluster_size = len(cluster_indices)
+            
+            if cluster_size >= 2:
+                idx1, idx2, _ = find_farthest_pair(cluster_indices, np.array([comments[idx] for idx in cluster_indices]))
+                representative_idx = cluster_indices[idx1]
+                text2 = comments[representative_idx]
+                text2_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child2,
+                    'cluster_size': cluster_size
+                }
+            else:
+                representative_idx = cluster_indices[0]
+                text2 = comments[representative_idx]
+                text2_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child2,
+                    'cluster_size': cluster_size
+                }
             id2 = child2
             
         merges.append({
@@ -188,8 +232,13 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
             'id2': id2,
             'text1': text1,
             'text2': text2,
+            'text1_info': text1_info,
+            'text2_info': text2_info,
             'distance': distance
         })
+        
+        new_cluster_id = len(comments) + i
+        cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
     
     return merges
 
@@ -211,14 +260,16 @@ def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_di
                 f.write(f"### テキスト1 (ID: {merge['id1']})\n\n")
                 f.write(f"{merge['text1']}\n\n")
             else:
-                f.write(f"### クラスタ1 (ID: {merge['id1']})\n\n")
+                text1_info = merge['text1_info']
+                f.write(f"### テキスト{text1_info['text_id']}(ID: {text1_info['text_id']}) from クラスタ1 (ID: {merge['id1']}, サイズ{text1_info['cluster_size']})\n\n")
                 f.write(f"{merge['text1']}\n\n")
             
             if merge['id2'] < len(comments):
                 f.write(f"### テキスト2 (ID: {merge['id2']})\n\n")
                 f.write(f"{merge['text2']}\n\n")
             else:
-                f.write(f"### クラスタ2 (ID: {merge['id2']})\n\n")
+                text2_info = merge['text2_info']
+                f.write(f"### テキスト{text2_info['text_id']}(ID: {text2_info['text_id']}) from クラスタ2 (ID: {merge['id2']}, サイズ{text2_info['cluster_size']})\n\n")
                 f.write(f"{merge['text2']}\n\n")
             
             if merge['id1'] < len(comments) and merge['id2'] < len(comments):
@@ -231,7 +282,11 @@ def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_di
         
         import pandas as pd
         df = pd.DataFrame(merges)
-        df.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding='utf-8')
+        # text1_info と text2_info は複雑なオブジェクトなのでCSVに保存する前に削除
+        df_csv = df.copy()
+        if 'text1_info' in df_csv.columns:
+            df_csv = df_csv.drop(columns=['text1_info', 'text2_info'])
+        df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding='utf-8')
 
 def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], ids: List[int], 
                         embeddings: np.ndarray, merges: List[Dict[str, Any]], output_dir: str) -> None:
@@ -306,12 +361,12 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
                 
                 <div class="merge-texts">
                     <div class="merge-text">
-                        <h3>{% if merge.id1 < total_comments %}テキスト1 (ID: {{ merge.id1 }}){% else %}クラスタ1 (ID: {{ merge.id1 }}){% endif %}</h3>
+                        <h3>{% if merge.id1 < total_comments %}テキスト1 (ID: {{ merge.id1 }}){% else %}テキスト{{ merge.text1_info.text_id }}(ID: {{ merge.text1_info.text_id }}) from クラスタ1 (ID: {{ merge.id1 }}, サイズ{{ merge.text1_info.cluster_size }}){% endif %}</h3>
                         <div>{{ merge.text1 }}</div>
                     </div>
                     
                     <div class="merge-text">
-                        <h3>{% if merge.id2 < total_comments %}テキスト2 (ID: {{ merge.id2 }}){% else %}クラスタ2 (ID: {{ merge.id2 }}){% endif %}</h3>
+                        <h3>{% if merge.id2 < total_comments %}テキスト2 (ID: {{ merge.id2 }}){% else %}テキスト{{ merge.text2_info.text_id }}(ID: {{ merge.text2_info.text_id }}) from クラスタ2 (ID: {{ merge.id2 }}, サイズ{{ merge.text2_info.cluster_size }}){% endif %}</h3>
                         <div>{{ merge.text2 }}</div>
                     </div>
                 </div>
