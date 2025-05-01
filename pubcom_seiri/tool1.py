@@ -314,14 +314,10 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
     merge_similarities = []
     merge_diffs = []
     for merge in merges:
-        if merge['id1'] < len(comments) and merge['id2'] < len(comments):
-            similarity = calculate_similarity_percentage(merge['text1'], merge['text2'])
-            diff = generate_html_diff(merge['text1'], merge['text2'])
-            merge_similarities.append(similarity)
-            merge_diffs.append(diff)
-        else:
-            merge_similarities.append(0)
-            merge_diffs.append("")
+        similarity = calculate_similarity_percentage(merge['text1'], merge['text2'])
+        diff = generate_html_diff(merge['text1'], merge['text2'])
+        merge_similarities.append(similarity)
+        merge_diffs.append(diff)
     
     # Jinja2テンプレート環境を設定
     template_str = """
@@ -389,12 +385,10 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
                     </div>
                 </div>
                 
-                {% if merge.id1 < total_comments and merge.id2 < total_comments %}
                 <div class="merge-diff">
                     <h3>類似度: {{ "%.2f"|format(merge_similarities[loop.index0]) }}%</h3>
                     <div class="diff">{{ merge_diffs[loop.index0]|safe }}</div>
                 </div>
-                {% endif %}
             </div>
             {% endfor %}
         </div>
