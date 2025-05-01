@@ -280,7 +280,7 @@ def save_output_data(output_data: Dict[str, Any], output_dir: str) -> None:
 def generate_markdown_report(output_data: Dict[str, Any], clusters: Dict[str, List[int]], 
                            independent_points: List[int], threshold: float, 
                            total_comments: int, output_dir: str,
-                           duplicates: Dict[str, List[int]] = None) -> None:
+                           duplicates: Dict[str, List[int]] = None, ids: List[int] = None) -> None:
     """Markdownレポートを生成する"""
     print("Generating Markdown report...")
     
@@ -306,7 +306,7 @@ def generate_markdown_report(output_data: Dict[str, Any], clusters: Dict[str, Li
         duplicate_section = "\n## 完全一致のコメント\n"
         for comment, indices in duplicates.items():
             if len(indices) > 1:
-                id_str = ", ".join([str(output_data["ids"][idx]) for idx in indices])
+                id_str = ", ".join([str(ids[idx]) for idx in indices])
                 duplicate_section += f"- ID {id_str}は同一内容が{len(indices)}件あった\n"
     
     # レポート作成
@@ -400,7 +400,7 @@ def main():
     generate_markdown_report(
         output_data, clusters, independent_points,
         args.threshold, total_comments, args.output,
-        duplicates
+        duplicates, ids
     )
     
     print(f"Processing completed successfully!")
