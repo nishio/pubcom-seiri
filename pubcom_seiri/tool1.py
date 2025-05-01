@@ -243,20 +243,20 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         except Exception as e:
             print(f"警告: 併合 #{i} の処理中にエラーが発生しました: {e}")
             continue
-            
-            merges.append({
-                'index': i,
-                'id1': id1,
-                'id2': id2,
-                'text1': text1,
-                'text2': text2,
-                'text1_info': text1_info,
-                'text2_info': text2_info,
-                'distance': distance
-            })
-            
-            new_cluster_id = len(comments) + i
-            cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
+        
+        merges.append({
+            'index': i,
+            'id1': id1,
+            'id2': id2,
+            'text1': text1,
+            'text2': text2,
+            'text1_info': text1_info,
+            'text2_info': text2_info,
+            'distance': distance
+        })
+        
+        new_cluster_id = len(comments) + i
+        cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
     
     return merges
 
