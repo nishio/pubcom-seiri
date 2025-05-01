@@ -90,8 +90,8 @@ def perform_clustering(embeddings: np.ndarray, distance_threshold: float = 0.4) 
             clusters[cluster_id] = []
         clusters[cluster_id].append(i)
     
-    distances = clustering.distances_
-    children = clustering.children_
+    distances = np.array(clustering.distances_)
+    children = np.array(clustering.children_)
     
     return labels, clusters, distances, children
 
@@ -148,7 +148,7 @@ def find_farthest_pair(cluster_indices: List[int], embeddings: np.ndarray) -> Tu
                 max_distance = dist
                 farthest_pair = (idx1, idx2)
     
-    return farthest_pair[0], farthest_pair[1], max_distance
+    return farthest_pair[0], farthest_pair[1], float(max_distance)
 
 def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: List[str], max_merges: int = 50) -> List[Dict[str, Any]]:
     """クラスタ併合情報を抽出する"""
@@ -229,9 +229,21 @@ def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_di
         df.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding='utf-8')
 
 def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], ids: List[int], 
-                        embeddings: np.ndarray, output_dir: str) -> None:
+                        embeddings: np.ndarray, merges: List[Dict[str, Any]], output_dir: str) -> None:
     """HTML形式のレポートを生成する"""
     print("Generating HTML report...")
+    
+    merge_similarities = []
+    merge_diffs = []
+    for merge in merges:
+        if merge['id1'] < len(comments) and merge['id2'] < len(comments):
+            similarity = calculate_similarity_percentage(merge['text1'], merge['text2'])
+            diff = generate_html_diff(merge['text1'], merge['text2'])
+            merge_similarities.append(similarity)
+            merge_diffs.append(diff)
+        else:
+            merge_similarities.append(0)
+            merge_diffs.append("")
     
     # Jinja2テンプレート環境を設定
     template_str = """
@@ -244,6 +256,7 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             body { font-family: Arial, sans-serif; margin: 20px; }
             h1 { color: #333; }
             h2 { color: #555; margin-top: 30px; }
+            h3 { color: #666; }
             .cluster { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
             .comment { margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
             .comment-id { font-weight: bold; margin-bottom: 5px; }
@@ -256,6 +269,12 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             .added { color: green; }
             .similarity { font-weight: bold; color: #0066cc; }
             .summary { margin-bottom: 20px; padding: 10px; background-color: #eef; border-radius: 3px; }
+            .merge-process { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #f5f5f5; }
+            .merge-item { margin-bottom: 20px; padding: 10px; background-color: #fff; border-radius: 3px; border-left: 4px solid #0066cc; }
+            .merge-title { font-weight: bold; margin-bottom: 10px; color: #0066cc; }
+            .merge-texts { display: flex; gap: 20px; }
+            .merge-text { flex: 1; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
+            .merge-diff { margin-top: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
         </style>
     </head>
     <body>
@@ -272,6 +291,37 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             </ul>
         </div>
         
+        <h2>クラスタ併合過程</h2>
+        <div class="merge-process">
+            <p>閾値に至るまでの併合過程を表示しています（最初の{{ merges|length }}件）</p>
+            
+            {% for merge in merges %}
+            <div class="merge-item">
+                <div class="merge-title">併合 #{{ merge.index + 1 }} （距離: {{ "%.6f"|format(merge.distance) }}）</div>
+                
+                <div class="merge-texts">
+                    <div class="merge-text">
+                        <h3>{% if merge.id1 < total_comments %}テキスト1 (ID: {{ merge.id1 }}){% else %}クラスタ1 (ID: {{ merge.id1 }}){% endif %}</h3>
+                        <div>{{ merge.text1 }}</div>
+                    </div>
+                    
+                    <div class="merge-text">
+                        <h3>{% if merge.id2 < total_comments %}テキスト2 (ID: {{ merge.id2 }}){% else %}クラスタ2 (ID: {{ merge.id2 }}){% endif %}</h3>
+                        <div>{{ merge.text2 }}</div>
+                    </div>
+                </div>
+                
+                {% if merge.id1 < total_comments and merge.id2 < total_comments %}
+                <div class="merge-diff">
+                    <h3>類似度: {{ "%.2f"|format(merge_similarities[loop.index0]) }}%</h3>
+                    <div class="diff">{{ merge_diffs[loop.index0]|safe }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        
+        <h2>最終クラスタリング結果</h2>
         {% for cluster_id, cluster_data in cluster_results.items() %}
         <div class="cluster">
             <h2>クラスタ #{{ cluster_id }} ({{ cluster_data.indices|length }}件)</h2>
@@ -331,7 +381,10 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
         cluster_sizes=cluster_sizes,
         cluster_results=cluster_results,
         comments=comments,
-        ids=ids
+        ids=ids,
+        merges=merges,
+        merge_similarities=merge_similarities,
+        merge_diffs=merge_diffs
     )
     
     # 出力ディレクトリを作成
@@ -369,7 +422,7 @@ def main():
     save_merge_info(merges, comments, args.output)
     
     # HTMLレポートを生成
-    generate_html_report(clusters, comments, ids, embeddings, args.output)
+    generate_html_report(clusters, comments, ids, embeddings, merges, args.output)
     
     print("Processing completed successfully!")
     print(f"Results saved to {args.output}")
