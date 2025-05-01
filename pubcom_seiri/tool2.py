@@ -279,7 +279,8 @@ def save_output_data(output_data: Dict[str, Any], output_dir: str) -> None:
 
 def generate_markdown_report(output_data: Dict[str, Any], clusters: Dict[str, List[int]], 
                            independent_points: List[int], threshold: float, 
-                           total_comments: int, output_dir: str) -> None:
+                           total_comments: int, output_dir: str,
+                           duplicates: Dict[str, List[int]] = None) -> None:
     """Markdownレポートを生成する"""
     print("Generating Markdown report...")
     
@@ -300,6 +301,14 @@ def generate_markdown_report(output_data: Dict[str, Any], clusters: Dict[str, Li
             max_cluster_size = len(indices)
             max_cluster_id = cluster_id
     
+    duplicate_section = ""
+    if duplicates and len(duplicates) > 0:
+        duplicate_section = "\n## 完全一致のコメント\n"
+        for comment, indices in duplicates.items():
+            if len(indices) > 1:
+                id_str = ", ".join([str(output_data["ids"][idx]) for idx in indices])
+                duplicate_section += f"- ID {id_str}は同一内容が{len(indices)}件あった\n"
+    
     # レポート作成
     report = f"""# クラスタリング分析レポート
 
@@ -311,7 +320,7 @@ def generate_markdown_report(output_data: Dict[str, Any], clusters: Dict[str, Li
 - クラスタ数: {num_clusters}
 - クラスタに分類されたコメント数: {clustered_comments} ({clustered_comments/total_comments*100:.2f}%)
 - 独立点の数: {num_independent} ({num_independent/total_comments*100:.2f}%)
-
+{duplicate_section}
 ## 最大のクラスタ
 - クラスタID: {max_cluster_id}
 - サイズ: {max_cluster_size} コメント ({max_cluster_size/total_comments*100:.2f}%)
@@ -341,6 +350,7 @@ def main():
     comments = results['comments']
     ids = results['ids']
     clusters = results['clusters']
+    duplicates = results.get('duplicates', {})
     
     # 埋め込みベクトルを再作成
     print("Recreating embeddings...")
@@ -389,7 +399,8 @@ def main():
     
     generate_markdown_report(
         output_data, clusters, independent_points,
-        args.threshold, total_comments, args.output
+        args.threshold, total_comments, args.output,
+        duplicates
     )
     
     print(f"Processing completed successfully!")
