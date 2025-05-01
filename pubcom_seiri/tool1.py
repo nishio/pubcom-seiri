@@ -169,76 +169,94 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
     sorted_distances = distances[sorted_indices]
     
     for i in range(max_items):
-        child1, child2 = sorted_children[i]
-        distance = sorted_distances[i]
-        
-        if child1 < len(comments):
-            text1 = comments[child1]
-            id1 = child1
-            text1_info = None
-        else:
-            cluster_indices = cluster_contents[child1]
-            cluster_size = len(cluster_indices)
+        try:
+            child1, child2 = sorted_children[i]
+            distance = sorted_distances[i]
             
-            if cluster_size >= 2:
-                local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
-                representative_idx = cluster_indices[local_idx1]
-                text1 = comments[representative_idx]
-                text1_info = {
-                    'text_id': representative_idx,
-                    'cluster_id': child1,
-                    'cluster_size': cluster_size
-                }
+            child1 = int(child1)
+            child2 = int(child2)
+            
+            if child1 < len(comments):
+                text1 = comments[child1]
+                id1 = child1
+                text1_info = None
             else:
-                representative_idx = cluster_indices[0]
-                text1 = comments[representative_idx]
-                text1_info = {
-                    'text_id': representative_idx,
-                    'cluster_id': child1,
-                    'cluster_size': cluster_size
-                }
-            id1 = child1
-            
-        if child2 < len(comments):
-            text2 = comments[child2]
-            id2 = child2
-            text2_info = None
-        else:
-            cluster_indices = cluster_contents[child2]
-            cluster_size = len(cluster_indices)
-            
-            if cluster_size >= 2:
-                local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
-                representative_idx = cluster_indices[local_idx1]
-                text2 = comments[representative_idx]
-                text2_info = {
-                    'text_id': representative_idx,
-                    'cluster_id': child2,
-                    'cluster_size': cluster_size
-                }
+                if child1 not in cluster_contents:
+                    print(f"警告: クラスタID {child1} が見つかりません。スキップします。")
+                    continue
+                    
+                cluster_indices = cluster_contents[child1]
+                cluster_size = len(cluster_indices)
+                
+                if cluster_size >= 2:
+                    local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                    representative_idx = cluster_indices[local_idx1]
+                    text1 = comments[representative_idx]
+                    text1_info = {
+                        'text_id': representative_idx,
+                        'cluster_id': child1,
+                        'cluster_size': cluster_size
+                    }
+                else:
+                    representative_idx = cluster_indices[0]
+                    text1 = comments[representative_idx]
+                    text1_info = {
+                        'text_id': representative_idx,
+                        'cluster_id': child1,
+                        'cluster_size': cluster_size
+                    }
+                id1 = child1
+                
+            if child2 < len(comments):
+                text2 = comments[child2]
+                id2 = child2
+                text2_info = None
             else:
-                representative_idx = cluster_indices[0]
-                text2 = comments[representative_idx]
-                text2_info = {
-                    'text_id': representative_idx,
-                    'cluster_id': child2,
-                    'cluster_size': cluster_size
-                }
-            id2 = child2
+                if child2 not in cluster_contents:
+                    print(f"警告: クラスタID {child2} が見つかりません。スキップします。")
+                    continue
+                    
+                cluster_indices = cluster_contents[child2]
+                cluster_size = len(cluster_indices)
+                
+                if cluster_size >= 2:
+                    local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                    representative_idx = cluster_indices[local_idx1]
+                    text2 = comments[representative_idx]
+                    text2_info = {
+                        'text_id': representative_idx,
+                        'cluster_id': child2,
+                        'cluster_size': cluster_size
+                    }
+                else:
+                    representative_idx = cluster_indices[0]
+                    text2 = comments[representative_idx]
+                    text2_info = {
+                        'text_id': representative_idx,
+                        'cluster_id': child2,
+                        'cluster_size': cluster_size
+                    }
+                id2 = child2
+        except KeyError as e:
+            print(f"警告: 併合 #{i} の処理中にKeyErrorが発生しました: {e}")
+            continue
+        except Exception as e:
+            print(f"警告: 併合 #{i} の処理中にエラーが発生しました: {e}")
+            continue
             
-        merges.append({
-            'index': i,
-            'id1': id1,
-            'id2': id2,
-            'text1': text1,
-            'text2': text2,
-            'text1_info': text1_info,
-            'text2_info': text2_info,
-            'distance': distance
-        })
-        
-        new_cluster_id = len(comments) + i
-        cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
+            merges.append({
+                'index': i,
+                'id1': id1,
+                'id2': id2,
+                'text1': text1,
+                'text2': text2,
+                'text1_info': text1_info,
+                'text2_info': text2_info,
+                'distance': distance
+            })
+            
+            new_cluster_id = len(comments) + i
+            cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
     
     return merges
 
