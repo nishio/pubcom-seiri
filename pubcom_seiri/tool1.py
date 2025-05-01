@@ -477,7 +477,7 @@ def main():
     # クラスタリングを実行
     labels, clusters, distances, children = perform_clustering(embeddings, args.threshold)
     
-    merges = extract_merge_info(children, distances, comments, embeddings, max_merges=-1)
+    merges = extract_merge_info(children, distances, comments, embeddings, max_merges=1000)
     
     save_merge_info(merges, comments, args.output)
     
