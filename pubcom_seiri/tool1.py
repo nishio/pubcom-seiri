@@ -35,11 +35,13 @@ def parse_args():
     parser.add_argument('--model', default='sentence-transformers/paraphrase-multilingual-mpnet-base-v2', help='使用する埋め込みモデル名')
     return parser.parse_args()
 
-def load_data(csv_path: str, limit: int = 10000) -> Tuple[List[str], List[int]]:
+def load_data(csv_path: str, limit: int = 10000) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
     """CSVからデータを読み込む"""
     print(f"Loading data from {csv_path}...")
     comments = []
     ids = []
+    
+    duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
     
     with open(csv_path, 'r', encoding='utf-8') as file:
         reader = csv.reader(file)
@@ -55,9 +57,17 @@ def load_data(csv_path: str, limit: int = 10000) -> Tuple[List[str], List[int]]:
                 comment = "".join(row[0].splitlines())
                 comments.append(comment)
                 ids.append(i)
+                
+                if comment in duplicate_map:
+                    duplicate_map[comment].append(i)
+                else:
+                    duplicate_map[comment] = [i]
+    
+    duplicates = {comment: ids for comment, ids in duplicate_map.items() if len(ids) > 1}
     
     print(f"Loaded {len(comments)} comments.")
-    return comments, ids
+    print(f"Found {len(duplicates)} duplicate comment types.")
+    return comments, ids, duplicates
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
     """コメントの埋め込みベクトルを生成する"""
@@ -307,7 +317,8 @@ def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_di
         df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding='utf-8')
 
 def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], ids: List[int], 
-                        embeddings: np.ndarray, merges: List[Dict[str, Any]], output_dir: str) -> None:
+                        embeddings: np.ndarray, merges: List[Dict[str, Any]], output_dir: str,
+                        duplicates: Dict[str, List[int]] = None) -> None:
     """HTML形式のレポートを生成する"""
     print("Generating HTML report...")
     
@@ -349,6 +360,8 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             .merge-texts { display: flex; gap: 20px; }
             .merge-text { flex: 1; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
             .merge-diff { margin-top: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
+            .duplicates { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #fff8e1; }
+            .duplicate-item { margin-bottom: 10px; padding: 5px; background-color: #fffde7; border-radius: 3px; }
         </style>
     </head>
     <body>
@@ -364,6 +377,21 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
                 {% endfor %}
             </ul>
         </div>
+        
+        {% if duplicates and duplicates|length > 0 %}
+        <h2>完全一致のコメント</h2>
+        <div class="duplicates">
+            <p>完全に同一内容のコメント: {{ duplicates|length }}種類</p>
+            <ul>
+                {% for comment, indices in duplicates.items() %}
+                <li class="duplicate-item">
+                    ID {{ ids_str[loop.index0] }}は同一内容が{{ indices|length }}件あった
+                    <div class="comment-text">{{ comment }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         
         <h2>クラスタ併合過程</h2>
         <div class="merge-process">
@@ -446,6 +474,11 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             "diff": diff
         }
     
+    ids_str = []
+    if duplicates:
+        for comment, indices in duplicates.items():
+            ids_str.append(", ".join([str(ids[idx]) for idx in indices]))
+    
     # HTMLを生成
     html = template.render(
         clusters=clusters,
@@ -456,7 +489,9 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
         ids=ids,
         merges=merges,
         merge_similarities=merge_similarities,
-        merge_diffs=merge_diffs
+        merge_diffs=merge_diffs,
+        duplicates=duplicates,
+        ids_str=ids_str
     )
     
     # 出力ディレクトリを作成
@@ -471,7 +506,8 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
         "comments": comments,
         "ids": ids,
         "labels": [int(label) for label in list(map(str, clusters.keys()))],
-        "clusters": clusters
+        "clusters": clusters,
+        "duplicates": duplicates if duplicates else {}
     }
     
     with open(f"{output_dir}/clusters.json", 'w', encoding='utf-8') as f:
@@ -481,7 +517,7 @@ def main():
     args = parse_args()
     
     # データを読み込む
-    comments, ids = load_data(args.input, args.limit)
+    comments, ids, duplicates = load_data(args.input, args.limit)
     
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
@@ -494,7 +530,7 @@ def main():
     save_merge_info(merges, comments, args.output)
     
     # HTMLレポートを生成
-    generate_html_report(clusters, comments, ids, embeddings, merges, args.output)
+    generate_html_report(clusters, comments, ids, embeddings, merges, args.output, duplicates)
     
     print("Processing completed successfully!")
     print(f"Results saved to {args.output}")
