@@ -150,7 +150,7 @@ def find_farthest_pair(cluster_indices: List[int], embeddings: np.ndarray) -> Tu
     
     return farthest_pair[0], farthest_pair[1], float(max_distance)
 
-def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: List[str], max_merges: int = -1) -> List[Dict[str, Any]]:
+def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: List[str], embeddings: np.ndarray, max_merges: int = -1) -> List[Dict[str, Any]]:
     """クラスタ併合情報を抽出する"""
     if max_merges < 0:
         print("全ての併合過程を抽出中...")
@@ -181,8 +181,8 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
             cluster_size = len(cluster_indices)
             
             if cluster_size >= 2:
-                idx1, idx2, _ = find_farthest_pair(cluster_indices, np.array([comments[idx] for idx in cluster_indices]))
-                representative_idx = cluster_indices[idx1]
+                local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                representative_idx = cluster_indices[local_idx1]
                 text1 = comments[representative_idx]
                 text1_info = {
                     'text_id': representative_idx,
@@ -208,8 +208,8 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
             cluster_size = len(cluster_indices)
             
             if cluster_size >= 2:
-                idx1, idx2, _ = find_farthest_pair(cluster_indices, np.array([comments[idx] for idx in cluster_indices]))
-                representative_idx = cluster_indices[idx1]
+                local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                representative_idx = cluster_indices[local_idx1]
                 text2 = comments[representative_idx]
                 text2_info = {
                     'text_id': representative_idx,
@@ -477,7 +477,7 @@ def main():
     # クラスタリングを実行
     labels, clusters, distances, children = perform_clustering(embeddings, args.threshold)
     
-    merges = extract_merge_info(children, distances, comments, max_merges=-1)
+    merges = extract_merge_info(children, distances, comments, embeddings, max_merges=-1)
     
     save_merge_info(merges, comments, args.output)
     
