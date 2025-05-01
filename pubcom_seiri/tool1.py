@@ -106,13 +106,31 @@ def generate_html_diff(text1: str, text2: str) -> str:
     diff = list(d.compare(text1, text2))
     
     html = []
+    current_style = None
+    current_content = []
+    
     for line in diff:
         if line.startswith('  '):
-            html.append(f'<span class="common">{line[2:]}</span>')
+            style = "common"
         elif line.startswith('- '):
-            html.append(f'<span class="removed">{line[2:]}</span>')
+            style = "removed"
         elif line.startswith('+ '):
-            html.append(f'<span class="added">{line[2:]}</span>')
+            style = "added"
+        else:
+            continue
+        
+        content = line[2:]
+        
+        if style == current_style:
+            current_content.append(content)
+        else:
+            if current_style is not None:
+                html.append(f'<span class="{current_style}">{"".join(current_content)}</span>')
+            current_style = style
+            current_content = [content]
+    
+    if current_style is not None:
+        html.append(f'<span class="{current_style}">{"".join(current_content)}</span>')
     
     return ''.join(html)
 
