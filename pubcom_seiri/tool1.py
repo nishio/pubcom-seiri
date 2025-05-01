@@ -164,6 +164,21 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
     for i in range(len(comments)):
         cluster_contents[i] = [i]
     
+    for i in range(len(distances)):
+        if distances[i] == 0:
+            print(f"警告: 距離が0のペアが見つかりました (インデックス: {i})")
+            c1, c2 = children[i]
+            c1, c2 = int(c1), int(c2)
+            
+            if c1 < len(comments) and c2 < len(comments):
+                recalc_dist = cosine(embeddings[c1], embeddings[c2])
+                if recalc_dist > 0:
+                    print(f"  再計算した距離: {recalc_dist:.6f}")
+                    distances[i] = recalc_dist
+                else:
+                    distances[i] = 1e-10
+                    print(f"  再計算しても距離が0のため、小さな値 (1e-10) を設定しました")
+    
     sorted_indices = np.argsort(distances)
     sorted_children = children[sorted_indices]
     sorted_distances = distances[sorted_indices]
@@ -171,10 +186,32 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
     for i in range(max_items):
         try:
             child1, child2 = sorted_children[i]
-            distance = sorted_distances[i]
+            distance = float(sorted_distances[i])  # 明示的にfloat型に変換
             
-            child1 = int(child1)
-            child2 = int(child2)
+            if distance < 1e-9:
+                print(f"併合 #{i+1}: 距離が非常に小さい値 ({distance:.10f}) です。再計算します。")
+                
+                child1_int = int(child1)
+                child2_int = int(child2)
+                
+                if child1_int < len(comments) and child2_int < len(comments):
+                    recalc_dist = cosine(embeddings[child1_int], embeddings[child2_int])
+                    if recalc_dist > 0:
+                        print(f"  再計算した距離: {recalc_dist:.6f}")
+                        distance = recalc_dist
+                    else:
+                        distance = 1e-10
+                        print(f"  再計算しても距離が0のため、小さな値 (1e-10) を設定しました")
+                else:
+                    text1_idx = child1_int if child1_int < len(comments) else cluster_contents[child1_int][0]
+                    text2_idx = child2_int if child2_int < len(comments) else cluster_contents[child2_int][0]
+                    recalc_dist = cosine(embeddings[text1_idx], embeddings[text2_idx])
+                    if recalc_dist > 0:
+                        print(f"  再計算した距離: {recalc_dist:.6f}")
+                        distance = recalc_dist
+                    else:
+                        distance = 1e-10
+                        print(f"  再計算しても距離が0のため、小さな値 (1e-10) を設定しました")
             
             if child1 < len(comments):
                 text1 = comments[child1]
@@ -243,6 +280,13 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         except Exception as e:
             print(f"警告: 併合 #{i} の処理中にエラーが発生しました: {e}")
             continue
+        
+        if distance < 1e-9:
+            text_similarity = calculate_similarity_percentage(text1, text2)
+            if text_similarity < 99.9:
+                estimated_distance = 1.0 - (text_similarity / 100.0)
+                print(f"併合 #{i+1}: テキスト類似度 {text_similarity:.2f}% から距離を概算: {estimated_distance:.6f}")
+                distance = max(estimated_distance, 0.001)  # 最小値を0.001に設定
         
         merges.append({
             'index': i,
