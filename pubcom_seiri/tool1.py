@@ -150,16 +150,21 @@ def find_farthest_pair(cluster_indices: List[int], embeddings: np.ndarray) -> Tu
     
     return farthest_pair[0], farthest_pair[1], float(max_distance)
 
-def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: List[str], max_merges: int = 50) -> List[Dict[str, Any]]:
+def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: List[str], max_merges: int = -1) -> List[Dict[str, Any]]:
     """クラスタ併合情報を抽出する"""
-    print(f"近い順に併合される最初の{max_merges}件のクラスタ情報を抽出中...")
+    if max_merges < 0:
+        print("全ての併合過程を抽出中...")
+        max_items = len(distances)
+    else:
+        print(f"近い順に併合される最初の{max_merges}件のクラスタ情報を抽出中...")
+        max_items = min(max_merges, len(distances))
     merges = []
     
     sorted_indices = np.argsort(distances)
     sorted_children = children[sorted_indices]
     sorted_distances = distances[sorted_indices]
     
-    for i in range(min(max_merges, len(sorted_distances))):
+    for i in range(max_items):
         child1, child2 = sorted_children[i]
         distance = sorted_distances[i]
         
@@ -417,7 +422,7 @@ def main():
     # クラスタリングを実行
     labels, clusters, distances, children = perform_clustering(embeddings, args.threshold)
     
-    merges = extract_merge_info(children, distances, comments, max_merges=50)
+    merges = extract_merge_info(children, distances, comments, max_merges=-1)
     
     save_merge_info(merges, comments, args.output)
     
