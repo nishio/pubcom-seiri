@@ -35,39 +35,61 @@ def parse_args():
     parser.add_argument('--model', default='sentence-transformers/paraphrase-multilingual-mpnet-base-v2', help='使用する埋め込みモデル名')
     return parser.parse_args()
 
-def load_data(csv_path: str, limit: int = 10000) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
-    """CSVからデータを読み込む"""
+def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
+    """CSVからデータを単純に読み込む"""
     print(f"Loading data from {csv_path}...")
     comments = []
     ids = []
-    
-    duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
     
     with open(csv_path, 'r', encoding='utf-8') as file:
         reader = csv.reader(file)
         next(reader)  # ヘッダーをスキップ
         
         rows = list(reader)
-        # 末尾n件を取得
-        target_rows = rows[-limit:] if limit < len(rows) else rows
         
-        for i, row in enumerate(target_rows):
+        for i, row in enumerate(rows):
             if len(row) >= 1:
                 # 改行を空白を入れずに結合
                 comment = "".join(row[0].splitlines())
                 comments.append(comment)
                 ids.append(i)
-                
-                if comment in duplicate_map:
-                    duplicate_map[comment].append(i)
-                else:
-                    duplicate_map[comment] = [i]
-    
-    duplicates = {comment: ids for comment, ids in duplicate_map.items() if len(ids) > 1}
     
     print(f"Loaded {len(comments)} comments.")
+    return comments, ids
+
+def remove_duplicates(comments: List[str], ids: List[int]) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
+    """重複を検出して除去する"""
+    print("Removing duplicates...")
+    unique_comments = []
+    unique_ids = []
+    duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
+    
+    for i, comment in enumerate(comments):
+        if comment in duplicate_map:
+            duplicate_map[comment].append(ids[i])
+        else:
+            duplicate_map[comment] = [ids[i]]
+            unique_comments.append(comment)
+            unique_ids.append(ids[i])
+    
+    duplicates = {comment: id_list for comment, id_list in duplicate_map.items() if len(id_list) > 1}
+    
     print(f"Found {len(duplicates)} duplicate comment types.")
-    return comments, ids, duplicates
+    print(f"Reduced to {len(unique_comments)} unique comments.")
+    return unique_comments, unique_ids, duplicates
+
+def get_limited_data(comments: List[str], ids: List[int], limit: int = 10000) -> Tuple[List[str], List[int]]:
+    """除去済みのデータからN件を取得する"""
+    print(f"Getting last {limit} comments...")
+    if limit < len(comments):
+        limited_comments = comments[-limit:]
+        limited_ids = ids[-limit:]
+    else:
+        limited_comments = comments
+        limited_ids = ids
+    
+    print(f"Selected {len(limited_comments)} comments for analysis.")
+    return limited_comments, limited_ids
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
     """コメントの埋め込みベクトルを生成する"""
@@ -516,8 +538,11 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
 def main():
     args = parse_args()
     
-    # データを読み込む
-    comments, ids, duplicates = load_data(args.input, args.limit)
+    all_comments, all_ids = load_data(args.input)
+    
+    unique_comments, unique_ids, duplicates = remove_duplicates(all_comments, all_ids)
+    
+    comments, ids = get_limited_data(unique_comments, unique_ids, args.limit)
     
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
