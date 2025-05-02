@@ -42,17 +42,18 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
     ids = []
     
     with open(csv_path, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
+        reader = csv.reader(file, delimiter='|')
         next(reader)  # ヘッダーをスキップ
         
         rows = list(reader)
         
         for i, row in enumerate(rows):
-            if len(row) >= 1:
+            if len(row) >= 2:  # IDとテキストの2列があることを確認
                 # 改行を空白を入れずに結合
-                comment = "".join(row[0].splitlines())
+                comment = "".join(row[1].splitlines())
+                id_val = int(row[0]) if row[0].isdigit() else i
                 comments.append(comment)
-                ids.append(i)
+                ids.append(id_val)
     
     print(f"Loaded {len(comments)} comments.")
     return comments, ids
@@ -499,7 +500,7 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
     ids_str = []
     if duplicates:
         for comment, indices in duplicates.items():
-            ids_str.append(", ".join([str(ids[idx]) for idx in indices]))
+            ids_str.append(", ".join([str(idx) for idx in indices]))
     
     # HTMLを生成
     html = template.render(
