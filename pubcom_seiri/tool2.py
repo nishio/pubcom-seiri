@@ -37,7 +37,12 @@ def parse_args():
 def load_clustering_results(input_dir: str) -> Dict[str, Any]:
     """tool1の出力結果を読み込む"""
     print(f"Loading clustering results from {input_dir}...")
-    with open(f"{input_dir}/clusters.json", 'r', encoding='utf-8') as f:
+    if input_dir.endswith('clusters.json'):
+        file_path = input_dir
+    else:
+        file_path = f"{input_dir}/clusters.json"
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
         results = json.load(f)
     return results
 
@@ -306,7 +311,7 @@ def generate_markdown_report(output_data: Dict[str, Any], clusters: Dict[str, Li
         duplicate_section = "\n## 完全一致のコメント\n"
         for comment, indices in duplicates.items():
             if len(indices) > 1:
-                id_str = ", ".join([str(ids[idx]) for idx in indices])
+                id_str = ", ".join([str(idx) for idx in indices])
                 duplicate_section += f"- ID {id_str}は同一内容が{len(indices)}件あった\n"
     
     # レポート作成
