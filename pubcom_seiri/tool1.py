@@ -42,16 +42,16 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
     ids = []
     
     with open(csv_path, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file, delimiter='|')
+        reader = csv.reader(file, delimiter=',')
         next(reader)  # ヘッダーをスキップ
         
         rows = list(reader)
         
         for i, row in enumerate(rows):
-            if len(row) >= 2:  # IDとテキストの2列があることを確認
+            if len(row) >= 1:  # コメント列があることを確認
                 # 改行を空白を入れずに結合
-                comment = "".join(row[1].splitlines())
-                id_val = int(row[0]) if row[0].isdigit() else i
+                comment = "".join(row[0].splitlines())
+                id_val = int(row[1]) if len(row) >= 2 and row[1].isdigit() else i
                 comments.append(comment)
                 ids.append(id_val)
     
@@ -191,91 +191,70 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
     else:
         print(f"近い順に併合される最初の{max_merges}件のクラスタ情報を抽出中...")
         max_items = min(max_merges, len(distances))
-    merges = []
     
     cluster_contents = {}
     for i in range(len(comments)):
         cluster_contents[i] = [i]
     
-    sorted_indices = np.argsort(distances)
-    sorted_children = children[sorted_indices]
-    sorted_distances = distances[sorted_indices]
-    
-    for i in range(max_items):
-        try:
-            child1, child2 = sorted_children[i]
-            distance = sorted_distances[i]
+    merges = []
+    for i, (child1, child2) in enumerate(children):
+        child1 = int(child1)
+        child2 = int(child2)
+        distance = float(distances[i])
+        
+        if child1 < len(comments):
+            text1 = comments[child1]
+            id1 = child1
+            text1_info = None
+        else:
+            cluster_indices = cluster_contents[child1]
+            cluster_size = len(cluster_indices)
             
-            child1 = int(child1)
-            child2 = int(child2)
+            if cluster_size >= 2:
+                local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                representative_idx = cluster_indices[local_idx1]
+                text1 = comments[representative_idx]
+                text1_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child1,
+                    'cluster_size': cluster_size
+                }
+            else:
+                representative_idx = cluster_indices[0]
+                text1 = comments[representative_idx]
+                text1_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child1,
+                    'cluster_size': cluster_size
+                }
+            id1 = child1
+        
+        if child2 < len(comments):
+            text2 = comments[child2]
+            id2 = child2
+            text2_info = None
+        else:
+            cluster_indices = cluster_contents[child2]
+            cluster_size = len(cluster_indices)
             
-            if child1 < len(comments):
-                text1 = comments[child1]
-                id1 = child1
-                text1_info = None
+            if cluster_size >= 2:
+                local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                representative_idx = cluster_indices[local_idx1]
+                text2 = comments[representative_idx]
+                text2_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child2,
+                    'cluster_size': cluster_size
+                }
             else:
-                if child1 not in cluster_contents:
-                    print(f"警告: クラスタID {child1} が見つかりません。スキップします。")
-                    continue
-                    
-                cluster_indices = cluster_contents[child1]
-                cluster_size = len(cluster_indices)
-                
-                if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
-                    representative_idx = cluster_indices[local_idx1]
-                    text1 = comments[representative_idx]
-                    text1_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child1,
-                        'cluster_size': cluster_size
-                    }
-                else:
-                    representative_idx = cluster_indices[0]
-                    text1 = comments[representative_idx]
-                    text1_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child1,
-                        'cluster_size': cluster_size
-                    }
-                id1 = child1
-                
-            if child2 < len(comments):
-                text2 = comments[child2]
-                id2 = child2
-                text2_info = None
-            else:
-                if child2 not in cluster_contents:
-                    print(f"警告: クラスタID {child2} が見つかりません。スキップします。")
-                    continue
-                    
-                cluster_indices = cluster_contents[child2]
-                cluster_size = len(cluster_indices)
-                
-                if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
-                    representative_idx = cluster_indices[local_idx1]
-                    text2 = comments[representative_idx]
-                    text2_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child2,
-                        'cluster_size': cluster_size
-                    }
-                else:
-                    representative_idx = cluster_indices[0]
-                    text2 = comments[representative_idx]
-                    text2_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child2,
-                        'cluster_size': cluster_size
-                    }
-                id2 = child2
-        except KeyError as e:
-            print(f"警告: 併合 #{i} の処理中にKeyErrorが発生しました: {e}")
-            continue
-        except Exception as e:
-            print(f"警告: 併合 #{i} の処理中にエラーが発生しました: {e}")
-            continue
+                representative_idx = cluster_indices[0]
+                text2 = comments[representative_idx]
+                text2_info = {
+                    'text_id': representative_idx,
+                    'cluster_id': child2,
+                    'cluster_size': cluster_size
+                }
+            id2 = child2
         
         merges.append({
             'index': i,
@@ -291,7 +270,11 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         new_cluster_id = len(comments) + i
         cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
     
-    return merges
+    merges_sorted = sorted(merges, key=lambda m: m['distance'])
+    if max_merges > 0:
+        merges_sorted = merges_sorted[:max_merges]
+    
+    return merges_sorted
 
 def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_dir: str) -> None:
     """クラスタ併合情報をMarkdownファイルとして保存する"""
