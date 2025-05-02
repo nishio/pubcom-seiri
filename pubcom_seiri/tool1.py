@@ -276,51 +276,7 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
     
     return merges_sorted
 
-def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_dir: str) -> None:
-    """クラスタ併合情報をMarkdownファイルとして保存する"""
-    print("クラスタ併合情報をMarkdownファイルとして保存中...")
-    
-    # 出力ディレクトリを作成
-    os.makedirs(output_dir, exist_ok=True)
-    
-    with open(f"{output_dir}/cluster_merges.md", 'w', encoding='utf-8') as f:
-        f.write(f"# クラスタ併合情報（最初の{len(merges)}件）\n\n")
-        for merge in merges:
-            new_cluster_id = len(comments) + merge['index']
-            f.write(f"## 併合 #{merge['index'] + 1} （距離: {merge['distance']:.6f}）\n\n")
-            f.write(f"**作成されたクラスタID**: {new_cluster_id}\n\n")
-            
-            if merge['id1'] < len(comments):
-                f.write(f"### テキスト1 (ID: {merge['id1']})\n\n")
-                f.write(f"{merge['text1']}\n\n")
-            else:
-                text1_info = merge['text1_info']
-                f.write(f"### テキスト{text1_info['text_id']}(ID: {text1_info['text_id']}) from クラスタ1 (ID: {merge['id1']}, サイズ{text1_info['cluster_size']})\n\n")
-                f.write(f"{merge['text1']}\n\n")
-            
-            if merge['id2'] < len(comments):
-                f.write(f"### テキスト2 (ID: {merge['id2']})\n\n")
-                f.write(f"{merge['text2']}\n\n")
-            else:
-                text2_info = merge['text2_info']
-                f.write(f"### テキスト{text2_info['text_id']}(ID: {text2_info['text_id']}) from クラスタ2 (ID: {merge['id2']}, サイズ{text2_info['cluster_size']})\n\n")
-                f.write(f"{merge['text2']}\n\n")
-            
-            if merge['id1'] < len(comments) and merge['id2'] < len(comments):
-                similarity = calculate_similarity_percentage(merge['text1'], merge['text2'])
-                diff = generate_html_diff(merge['text1'], merge['text2'])
-                f.write(f"### 類似度: {similarity:.2f}%\n\n")
-                f.write(f"### 差分\n\n```html\n{diff}\n```\n\n")
-            
-            f.write("---\n\n")
-        
-        import pandas as pd
-        df = pd.DataFrame(merges)
-        # text1_info と text2_info は複雑なオブジェクトなのでCSVに保存する前に削除
-        df_csv = df.copy()
-        if 'text1_info' in df_csv.columns:
-            df_csv = df_csv.drop(columns=['text1_info', 'text2_info'])
-        df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding='utf-8')
+
 
 def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], ids: List[int], 
                         embeddings: np.ndarray, merges: List[Dict[str, Any]], output_dir: str,
@@ -535,8 +491,6 @@ def main():
     labels, clusters, distances, children = perform_clustering(embeddings, args.threshold)
     
     merges = extract_merge_info(children, distances, comments, embeddings, max_merges=1000)
-    
-    save_merge_info(merges, comments, args.output)
     
     # HTMLレポートを生成
     generate_html_report(clusters, comments, ids, embeddings, merges, args.output, duplicates)
