@@ -37,7 +37,12 @@ def parse_args():
 def load_clustering_results(input_dir: str) -> Dict[str, Any]:
     """tool1の出力結果を読み込む"""
     print(f"Loading clustering results from {input_dir}...")
-    with open(f"{input_dir}/clusters.json", 'r', encoding='utf-8') as f:
+    if input_dir.endswith('clusters.json'):
+        file_path = input_dir
+    else:
+        file_path = f"{input_dir}/clusters.json"
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
         results = json.load(f)
     return results
 
