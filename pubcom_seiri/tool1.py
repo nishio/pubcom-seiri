@@ -347,7 +347,7 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             <ul>
                 {% for comment, indices in duplicates.items() %}
                 <li class="duplicate-item">
-                    ID {{ ids_str[loop.index0] }}は同一内容が{{ indices|length }}件あった
+                    同一内容{{ indices|length }}件: ID {{ ids_str[loop.index0] }}
                     <div class="comment-text">{{ comment }}</div>
                 </li>
                 {% endfor %}
