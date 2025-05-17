@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>クラスタリング結果</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        h2 { color: #555; margin-top: 30px; }
+        h3 { color: #666; }
+        .cluster { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .comment { margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
+        .comment-id { font-weight: bold; margin-bottom: 5px; }
+        .comment-text { white-space: pre-wrap; }
+        .diff-container { margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px; }
+        .diff-title { font-weight: bold; margin-bottom: 10px; }
+        .diff { white-space: pre-wrap; font-family: monospace; }
+        .common { color: black; }
+        .removed { color: red; text-decoration: line-through; }
+        .added { color: green; }
+        .similarity { font-weight: bold; color: #0066cc; }
+        .summary { margin-bottom: 20px; padding: 10px; background-color: #eef; border-radius: 3px; }
+        .merge-process { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #f5f5f5; }
+        .merge-item { margin-bottom: 20px; padding: 10px; background-color: #fff; border-radius: 3px; border-left: 4px solid #0066cc; }
+        .merge-title { font-weight: bold; margin-bottom: 10px; color: #0066cc; }
+        .merge-texts { display: flex; gap: 20px; }
+        .merge-text { flex: 1; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
+        .merge-diff { margin-top: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
+        .duplicates { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #fff8e1; }
+        .duplicate-item { margin-bottom: 10px; padding: 5px; background-color: #fffde7; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>クラスタリング結果</h1>
+    
+    <div class="summary">
+        <p>総クラスタ数: {{ clusters|length }}</p>
+        <p>総コメント数: {{ total_comments }}</p>
+        <p>クラスタサイズ分布:</p>
+        <ul>
+            {% for size, count in cluster_sizes.items() %}
+            <li>{{ size }}件のクラスタ: {{ count }}個</li>
+            {% endfor %}
+        </ul>
+    </div>
+    
+    {% if duplicates and duplicates|length > 0 %}
+    <h2>完全一致のコメント</h2>
+    <div class="duplicates">
+        <p>完全に同一内容のコメント: {{ duplicates|length }}種類</p>
+        <ul>
+            {% for comment, indices in duplicates.items() %}
+            <li class="duplicate-item">
+                ID {{ ids_str[loop.index0] }}は同一内容が{{ indices|length }}件あった
+                <div class="comment-text">{{ comment }}</div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <h2>クラスタ併合過程</h2>
+    <div class="merge-process">
+        <p>閾値に至るまでの併合過程を表示しています（最初の{{ merges|length }}件）</p>
+        
+        {% for merge in merges %}
+        <div class="merge-item">
+            <div class="merge-title">併合 #{{ merge.index + 1 }} （距離: {{ "%.6f"|format(merge.distance) }}）</div>
+            
+            <div class="merge-texts">
+                <div class="merge-text">
+                    <h3>{{ merge.display_h3_1 }}</h3>
+                    <div>{{ merge.text1 }}</div>
+                </div>
+                
+                <div class="merge-text">
+                    <h3>{{ merge.display_h3_2 }}</h3>
+                    <div>{{ merge.text2 }}</div>
+                </div>
+            </div>
+            
+            <div class="merge-diff">
+                <h3>類似度: {{ "%.2f"|format(merge_similarities[loop.index0]) }}%</h3>
+                <div class="diff">{{ merge_diffs[loop.index0]|safe }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <h2>最終クラスタリング結果</h2>
+    {% for cluster_id, cluster_data in cluster_results.items() %}
+    <div class="cluster">
+        <h2>クラスタ #{{ cluster_id }} ({{ cluster_data.indices|length }}件)</h2>
+        
+        {% if cluster_data.indices|length >= 2 %}
+        <div class="diff-container">
+            <div class="diff-title">クラスタ内の最も遠いペア (距離: {{ "%.4f"|format(cluster_data.max_distance) }}, 類似度: {{ "%.2f"|format(cluster_data.similarity) }}%)</div>
+            <div class="diff">{{ cluster_data.diff|safe }}</div>
+        </div>
+        {% endif %}
+        
+        {% for idx in cluster_data.indices %}
+        <div class="comment">
+            <div class="comment-id">ID: {{ ids[idx] }}</div>
+            <div class="comment-text">{{ comments[idx] }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</body>
+</html>
