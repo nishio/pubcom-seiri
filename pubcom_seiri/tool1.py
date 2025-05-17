@@ -26,6 +26,19 @@ from typing import List, Dict, Tuple, Any, Optional
 import jinja2
 
 
+def select_column(row):
+    "return (id, comment)"
+    # aipubcom
+    # comment = row[0]
+    # id_val = int(row[1])
+
+    # ene
+    comment = row[2]
+    id_val = int(row[0])
+
+    return (id_val, comment)
+
+
 def parse_args():
     """コマンドライン引数をパースする"""
     parser = argparse.ArgumentParser(
@@ -60,16 +73,16 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
     ids = []
 
     with open(csv_path, "r", encoding="utf-8") as file:
-        reader = csv.reader(file, delimiter="|")
+        reader = csv.reader(file, delimiter=",")
         next(reader)  # ヘッダーをスキップ
 
         rows = list(reader)
 
         for i, row in enumerate(rows):
-            if len(row) >= 2:  # IDとテキストの2列があることを確認
+            if len(row) >= 1:  # コメント列があることを確認
+                id_val, comment = select_column(row)
                 # 改行を空白を入れずに結合
-                comment = "".join(row[1].splitlines())
-                id_val = int(row[0]) if row[0].isdigit() else i
+                comment = "".join(comment.splitlines())
                 comments.append(comment)
                 ids.append(id_val)
 
@@ -79,12 +92,14 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
 
 def remove_duplicates(
     comments: List[str], ids: List[int]
-) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
+) -> Tuple[List[str], List[int], Dict[str, List[int]], Dict[int, List[int]]]:
+
     """重複を検出して除去する"""
     print("Removing duplicates...")
     unique_comments = []
     unique_ids = []
     duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
+    id_mapping = {}     # インデックスをキーに、元のCSV IDのリストを値とする辞書
 
     for i, comment in enumerate(comments):
         if comment in duplicate_map:
@@ -93,6 +108,10 @@ def remove_duplicates(
             duplicate_map[comment] = [ids[i]]
             unique_comments.append(comment)
             unique_ids.append(ids[i])
+            id_mapping[len(unique_comments) - 1] = [ids[i]]  # 新しいインデックスに対応するIDを記録
+
+    for i, comment in enumerate(unique_comments):
+        id_mapping[i] = duplicate_map[comment]  # 元のCSV IDのリストを保存
 
     duplicates = {
         comment: id_list
@@ -102,23 +121,34 @@ def remove_duplicates(
 
     print(f"Found {len(duplicates)} duplicate comment types.")
     print(f"Reduced to {len(unique_comments)} unique comments.")
-    return unique_comments, unique_ids, duplicates
+    return unique_comments, unique_ids, duplicates, id_mapping
 
 
 def get_limited_data(
-    comments: List[str], ids: List[int], limit: int = 10000
-) -> Tuple[List[str], List[int]]:
+    comments: List[str], ids: List[int], id_mapping: Dict[int, List[int]] = None, limit: int = 10000
+) -> Tuple[List[str], List[int], Dict[int, List[int]]]:
+
     """除去済みのデータからN件を取得する"""
     print(f"Getting last {limit} comments...")
     if limit < len(comments):
         limited_comments = comments[-limit:]
         limited_ids = ids[-limit:]
+        if id_mapping:
+            limited_id_mapping = {}
+            for i in range(len(limited_comments)):
+                original_idx = len(comments) - limit + i
+                limited_id_mapping[i] = id_mapping[original_idx]
+        else:
+            limited_id_mapping = None
     else:
         limited_comments = comments
         limited_ids = ids
+        limited_id_mapping = id_mapping
 
     print(f"Selected {len(limited_comments)} comments for analysis.")
-    return limited_comments, limited_ids
+    return limited_comments, limited_ids, limited_id_mapping
+
+
 
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
@@ -231,6 +261,7 @@ def extract_merge_info(
     comments: List[str],
     embeddings: np.ndarray,
     max_merges: int = -1,
+    id_mapping: Dict[int, List[int]] = None,  # id_mappingパラメータを追加
 ) -> List[Dict[str, Any]]:
     """クラスタ併合情報を抽出する"""
     if max_merges < 0:
@@ -242,17 +273,25 @@ def extract_merge_info(
     merges = []
 
     cluster_contents = {}
+    
     for i in range(len(comments)):
         cluster_contents[i] = [i]
-
-    sorted_indices = np.argsort(distances)
-    sorted_children = children[sorted_indices]
-    sorted_distances = distances[sorted_indices]
+    
+    all_possible_ids = set()
+    for child1, child2 in children:
+        all_possible_ids.add(int(child1))
+        all_possible_ids.add(int(child2))
+    
+    max_cluster_id = len(comments) + len(distances)
+    
+    for i in range(len(comments), max_cluster_id):
+        if i not in cluster_contents:
+            cluster_contents[i] = []
 
     for i in range(max_items):
         try:
-            child1, child2 = sorted_children[i]
-            distance = sorted_distances[i]
+            child1, child2 = children[i]
+            distance = distances[i]
 
             child1 = int(child1)
             child2 = int(child2)
@@ -263,18 +302,19 @@ def extract_merge_info(
                 text1_info = None
             else:
                 if child1 not in cluster_contents:
-                    print(
-                        f"警告: クラスタID {child1} が見つかりません。スキップします。"
-                    )
-                    continue
+                    cluster_contents[child1] = []
 
                 cluster_indices = cluster_contents[child1]
                 cluster_size = len(cluster_indices)
 
                 if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(
-                        range(len(cluster_indices)), embeddings[cluster_indices]
-                    )
+                    try:
+                        local_idx1, local_idx2, _ = find_farthest_pair(
+                            range(len(cluster_indices)), embeddings[cluster_indices]
+                        )
+                    except Exception as e:
+                        print(f"警告: クラスタ {child1} の処理中にエラーが発生しました: {e}")
+                        local_idx1 = 0
                     representative_idx = cluster_indices[local_idx1]
                     text1 = comments[representative_idx]
                     text1_info = {
@@ -298,18 +338,19 @@ def extract_merge_info(
                 text2_info = None
             else:
                 if child2 not in cluster_contents:
-                    print(
-                        f"警告: クラスタID {child2} が見つかりません。スキップします。"
-                    )
-                    continue
+                    cluster_contents[child2] = []
 
                 cluster_indices = cluster_contents[child2]
                 cluster_size = len(cluster_indices)
 
                 if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(
-                        range(len(cluster_indices)), embeddings[cluster_indices]
-                    )
+                    try:
+                        local_idx1, local_idx2, _ = find_farthest_pair(
+                            range(len(cluster_indices)), embeddings[cluster_indices]
+                        )
+                    except Exception as e:
+                        print(f"警告: クラスタ {child2} の処理中にエラーが発生しました: {e}")
+                        local_idx1 = 0
                     representative_idx = cluster_indices[local_idx1]
                     text2 = comments[representative_idx]
                     text2_info = {
@@ -411,7 +452,6 @@ def save_merge_info(
             df_csv = df_csv.drop(columns=["text1_info", "text2_info"])
         df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding="utf-8")
 
-
 def build_display_id(id_value, id_mapping=None):
     """IDの表示形式を「<ID>他n件」の形式に変換する"""
     if not id_mapping or id_value not in id_mapping:
@@ -450,6 +490,7 @@ def generate_html_report(
     merges: List[Dict[str, Any]],
     output_dir: str,
     duplicates: Dict[str, List[int]] = None,
+    id_mapping: Dict[int, List[int]] = None,
 ) -> None:
     """HTML形式のレポートを生成する"""
     print("Generating HTML report...")
@@ -462,7 +503,10 @@ def generate_html_report(
         merge_similarities.append(similarity)
         merge_diffs.append(diff)
 
-    id_mapping = {}
+    # id_mappingの処理
+    if id_mapping is None:
+        id_mapping = {}
+    
     if duplicates:
         for comment, duplicate_ids in duplicates.items():
             for id_val in duplicate_ids:
@@ -481,7 +525,6 @@ def generate_html_report(
     template_loader = jinja2.FileSystemLoader(os.path.dirname(template_path))
     template_env = jinja2.Environment(loader=template_loader)
     template = template_env.get_template(os.path.basename(template_path))
-
     # クラスタサイズの分布を計算
     cluster_sizes = {}
     for indices in clusters.values():
@@ -531,6 +574,7 @@ def generate_html_report(
         merge_diffs=merge_diffs,
         duplicates=duplicates,
         ids_str=ids_str,
+        id_mapping=id_mapping,
     )
 
     # 出力ディレクトリを作成
@@ -558,9 +602,9 @@ def main():
 
     all_comments, all_ids = load_data(args.input)
 
-    unique_comments, unique_ids, duplicates = remove_duplicates(all_comments, all_ids)
+    unique_comments, unique_ids, duplicates, id_mapping = remove_duplicates(all_comments, all_ids)
 
-    comments, ids = get_limited_data(unique_comments, unique_ids, args.limit)
+    comments, ids, id_mapping = get_limited_data(unique_comments, unique_ids, id_mapping, args.limit)
 
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
@@ -571,14 +615,14 @@ def main():
     )
 
     merges = extract_merge_info(
-        children, distances, comments, embeddings, max_merges=1000
+        children, distances, comments, embeddings, max_merges=1000, id_mapping=id_mapping
     )
 
     save_merge_info(merges, comments, args.output)
 
     # HTMLレポートを生成
     generate_html_report(
-        clusters, comments, ids, embeddings, merges, args.output, duplicates
+        clusters, comments, ids, embeddings, merges, args.output, duplicates, id_mapping
     )
 
     print("Processing completed successfully!")
