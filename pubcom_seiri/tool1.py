@@ -628,6 +628,7 @@ def generate_html_report(
         merge_diffs=merge_diffs,
         duplicates=duplicates,
         ids_str=ids_str,
+        id_mapping=id_mapping,
     )
 
     # 出力ディレクトリを作成
