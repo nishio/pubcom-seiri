@@ -26,6 +26,19 @@ from typing import List, Dict, Tuple, Any, Optional
 import jinja2
 
 
+def select_column(row):
+    "return (id, comment)"
+    # aipubcom
+    # comment = row[0]
+    # id_val = int(row[1])
+
+    # ene
+    comment = row[2]
+    id_val = int(row[0])
+
+    return (id_val, comment)
+
+
 def parse_args():
     """コマンドライン引数をパースする"""
     parser = argparse.ArgumentParser(
@@ -60,16 +73,16 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
     ids = []
 
     with open(csv_path, "r", encoding="utf-8") as file:
-        reader = csv.reader(file, delimiter="|")
+        reader = csv.reader(file, delimiter=",")
         next(reader)  # ヘッダーをスキップ
 
         rows = list(reader)
 
         for i, row in enumerate(rows):
-            if len(row) >= 2:  # IDとテキストの2列があることを確認
+            if len(row) >= 1:  # コメント列があることを確認
+                id_val, comment = select_column(row)
                 # 改行を空白を入れずに結合
-                comment = "".join(row[1].splitlines())
-                id_val = int(row[0]) if row[0].isdigit() else i
+                comment = "".join(comment.splitlines())
                 comments.append(comment)
                 ids.append(id_val)
 
@@ -132,6 +145,7 @@ def get_limited_data(
 
     print(f"Selected {len(limited_comments)} comments for analysis.")
     return limited_comments, limited_ids, limited_id_mapping
+
 
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
@@ -501,7 +515,7 @@ def generate_html_report(
             <ul>
                 {% for comment, indices in duplicates.items() %}
                 <li class="duplicate-item">
-                    ID {{ ids_str[loop.index0] }}は同一内容が{{ indices|length }}件あった
+                    同一内容{{ indices|length }}件: ID {{ ids_str[loop.index0] }}
                     <div class="comment-text">{{ comment }}</div>
                 </li>
                 {% endfor %}

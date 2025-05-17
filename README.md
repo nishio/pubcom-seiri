@@ -67,3 +67,6 @@ python -m pubcom_seiri.tool2 --input output_dir/clusters.json --threshold 0.4 --
 
 MIT
 
+## memo
+
+- 初手で文字列diffを使うのは不適当: https://github.com/nishio/pubcom-seiri/pull/17
