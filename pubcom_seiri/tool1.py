@@ -25,28 +25,46 @@ from sklearn.cluster import AgglomerativeClustering
 from typing import List, Dict, Tuple, Any, Optional
 import jinja2
 
+
 def parse_args():
     """コマンドライン引数をパースする"""
-    parser = argparse.ArgumentParser(description='CSVデータのクラスタリングと結果のHTML出力')
-    parser.add_argument('--input', required=True, help='入力CSVファイルのパス')
-    parser.add_argument('--output', required=True, help='出力ディレクトリのパス')
-    parser.add_argument('--limit', type=int, default=10000, help='分析対象とするCSVデータの末尾n件 (default: 10000)')
-    parser.add_argument('--threshold', type=float, default=0.4, help='クラスタリングの距離閾値 (default: 0.4)')
-    parser.add_argument('--model', default='sentence-transformers/paraphrase-multilingual-mpnet-base-v2', help='使用する埋め込みモデル名')
+    parser = argparse.ArgumentParser(
+        description="CSVデータのクラスタリングと結果のHTML出力"
+    )
+    parser.add_argument("--input", required=True, help="入力CSVファイルのパス")
+    parser.add_argument("--output", required=True, help="出力ディレクトリのパス")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=10000,
+        help="分析対象とするCSVデータの末尾n件 (default: 10000)",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=0.4,
+        help="クラスタリングの距離閾値 (default: 0.4)",
+    )
+    parser.add_argument(
+        "--model",
+        default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+        help="使用する埋め込みモデル名",
+    )
     return parser.parse_args()
+
 
 def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
     """CSVからデータを単純に読み込む"""
     print(f"Loading data from {csv_path}...")
     comments = []
     ids = []
-    
-    with open(csv_path, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file, delimiter='|')
+
+    with open(csv_path, "r", encoding="utf-8") as file:
+        reader = csv.reader(file, delimiter="|")
         next(reader)  # ヘッダーをスキップ
-        
+
         rows = list(reader)
-        
+
         for i, row in enumerate(rows):
             if len(row) >= 2:  # IDとテキストの2列があることを確認
                 # 改行を空白を入れずに結合
@@ -54,17 +72,20 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
                 id_val = int(row[0]) if row[0].isdigit() else i
                 comments.append(comment)
                 ids.append(id_val)
-    
+
     print(f"Loaded {len(comments)} comments.")
     return comments, ids
 
-def remove_duplicates(comments: List[str], ids: List[int]) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
+
+def remove_duplicates(
+    comments: List[str], ids: List[int]
+) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
     """重複を検出して除去する"""
     print("Removing duplicates...")
     unique_comments = []
     unique_ids = []
     duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
-    
+
     for i, comment in enumerate(comments):
         if comment in duplicate_map:
             duplicate_map[comment].append(ids[i])
@@ -72,14 +93,21 @@ def remove_duplicates(comments: List[str], ids: List[int]) -> Tuple[List[str], L
             duplicate_map[comment] = [ids[i]]
             unique_comments.append(comment)
             unique_ids.append(ids[i])
-    
-    duplicates = {comment: id_list for comment, id_list in duplicate_map.items() if len(id_list) > 1}
-    
+
+    duplicates = {
+        comment: id_list
+        for comment, id_list in duplicate_map.items()
+        if len(id_list) > 1
+    }
+
     print(f"Found {len(duplicates)} duplicate comment types.")
     print(f"Reduced to {len(unique_comments)} unique comments.")
     return unique_comments, unique_ids, duplicates
 
-def get_limited_data(comments: List[str], ids: List[int], limit: int = 10000) -> Tuple[List[str], List[int]]:
+
+def get_limited_data(
+    comments: List[str], ids: List[int], limit: int = 10000
+) -> Tuple[List[str], List[int]]:
     """除去済みのデータからN件を取得する"""
     print(f"Getting last {limit} comments...")
     if limit < len(comments):
@@ -88,33 +116,39 @@ def get_limited_data(comments: List[str], ids: List[int], limit: int = 10000) ->
     else:
         limited_comments = comments
         limited_ids = ids
-    
+
     print(f"Selected {len(limited_comments)} comments for analysis.")
     return limited_comments, limited_ids
+
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
     """コメントの埋め込みベクトルを生成する"""
     print(f"Loading model: {model_name}...")
     model = SentenceTransformer(model_name)
-    
+
     print("Creating embeddings...")
     embeddings = model.encode(comments)
-    
+
     return embeddings
 
-def perform_clustering(embeddings: np.ndarray, distance_threshold: float = 0.4) -> Tuple[np.ndarray, Dict[str, List[int]], np.ndarray, np.ndarray]:
+
+def perform_clustering(
+    embeddings: np.ndarray, distance_threshold: float = 0.4
+) -> Tuple[np.ndarray, Dict[str, List[int]], np.ndarray, np.ndarray]:
     """凝集クラスタリングを実行する"""
-    print(f"Performing agglomerative clustering with distance_threshold={distance_threshold}...")
+    print(
+        f"Performing agglomerative clustering with distance_threshold={distance_threshold}..."
+    )
     clustering = AgglomerativeClustering(
         n_clusters=None,
         distance_threshold=distance_threshold,
-        metric='cosine',
-        linkage='complete'
+        metric="cosine",
+        linkage="complete",
     )
-    
+
     labels = clustering.fit_predict(embeddings)
     print(f"Found {len(set(labels))} clusters.")
-    
+
     # クラスタごとにインデックスをグループ化
     clusters = {}
     for i, label in enumerate(labels):
@@ -122,68 +156,82 @@ def perform_clustering(embeddings: np.ndarray, distance_threshold: float = 0.4) 
         if cluster_id not in clusters:
             clusters[cluster_id] = []
         clusters[cluster_id].append(i)
-    
+
     distances = np.array(clustering.distances_)
     children = np.array(clustering.children_)
-    
+
     return labels, clusters, distances, children
+
 
 def calculate_similarity_percentage(text1: str, text2: str) -> float:
     """2つのテキスト間の類似度をパーセンテージで計算する"""
     matcher = difflib.SequenceMatcher(None, text1, text2)
     return matcher.ratio() * 100
 
+
 def generate_html_diff(text1: str, text2: str) -> str:
     """2つのテキスト間の差分をHTML形式で生成する"""
     d = difflib.Differ()
     diff = list(d.compare(text1, text2))
-    
+
     html = []
     current_style = None
     current_content = []
-    
+
     for line in diff:
-        if line.startswith('  '):
+        if line.startswith("  "):
             style = "common"
-        elif line.startswith('- '):
+        elif line.startswith("- "):
             style = "removed"
-        elif line.startswith('+ '):
+        elif line.startswith("+ "):
             style = "added"
         else:
             continue
-        
+
         content = line[2:]
-        
+
         if style == current_style:
             current_content.append(content)
         else:
             if current_style is not None:
-                html.append(f'<span class="{current_style}">{"".join(current_content)}</span>')
+                html.append(
+                    f'<span class="{current_style}">{"".join(current_content)}</span>'
+                )
             current_style = style
             current_content = [content]
-    
+
     if current_style is not None:
         html.append(f'<span class="{current_style}">{"".join(current_content)}</span>')
-    
-    return ''.join(html)
 
-def find_farthest_pair(cluster_indices: List[int], embeddings: np.ndarray) -> Tuple[int, int, float]:
+    return "".join(html)
+
+
+def find_farthest_pair(
+    cluster_indices: List[int], embeddings: np.ndarray
+) -> Tuple[int, int, float]:
     """クラスタ内で最も遠いペアを見つける"""
     max_distance = -1.0  # floatに明示的に型指定
     farthest_pair = (-1, -1)
-    
+
     for i in range(len(cluster_indices)):
-        for j in range(i+1, len(cluster_indices)):
+        for j in range(i + 1, len(cluster_indices)):
             idx1 = cluster_indices[i]
             idx2 = cluster_indices[j]
             dist = cosine(embeddings[idx1], embeddings[idx2])
             if dist > max_distance:
                 max_distance = dist
                 farthest_pair = (idx1, idx2)
-    
+
     return farthest_pair[0], farthest_pair[1], float(max_distance)
 
-def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: List[str], embeddings: np.ndarray, max_merges: int = -1) -> List[Dict[str, Any]]:
+
+def extract_merge_info(
+    children: np.ndarray,
+    distances: np.ndarray,
+    comments: List[str],
+    embeddings: np.ndarray,
+    max_merges: int = -1,
+) -> List[Dict[str, Any]]:
     """クラスタ併合情報を抽出する"""
     if max_merges < 0:
         print("全ての併合過程を抽出中...")
@@ -192,82 +240,90 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         print(f"近い順に併合される最初の{max_merges}件のクラスタ情報を抽出中...")
         max_items = min(max_merges, len(distances))
     merges = []
-    
+
     cluster_contents = {}
     for i in range(len(comments)):
         cluster_contents[i] = [i]
-    
+
     sorted_indices = np.argsort(distances)
     sorted_children = children[sorted_indices]
     sorted_distances = distances[sorted_indices]
-    
+
     for i in range(max_items):
         try:
             child1, child2 = sorted_children[i]
             distance = sorted_distances[i]
-            
+
             child1 = int(child1)
             child2 = int(child2)
-            
+
             if child1 < len(comments):
                 text1 = comments[child1]
                 id1 = child1
                 text1_info = None
             else:
                 if child1 not in cluster_contents:
-                    print(f"警告: クラスタID {child1} が見つかりません。スキップします。")
+                    print(
+                        f"警告: クラスタID {child1} が見つかりません。スキップします。"
+                    )
                     continue
-                    
+
                 cluster_indices = cluster_contents[child1]
                 cluster_size = len(cluster_indices)
-                
+
                 if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                    local_idx1, local_idx2, _ = find_farthest_pair(
+                        range(len(cluster_indices)), embeddings[cluster_indices]
+                    )
                     representative_idx = cluster_indices[local_idx1]
                     text1 = comments[representative_idx]
                     text1_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child1,
-                        'cluster_size': cluster_size
+                        "text_id": representative_idx,
+                        "cluster_id": child1,
+                        "cluster_size": cluster_size,
                     }
                 else:
                     representative_idx = cluster_indices[0]
                     text1 = comments[representative_idx]
                     text1_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child1,
-                        'cluster_size': cluster_size
+                        "text_id": representative_idx,
+                        "cluster_id": child1,
+                        "cluster_size": cluster_size,
                     }
                 id1 = child1
-                
+
             if child2 < len(comments):
                 text2 = comments[child2]
                 id2 = child2
                 text2_info = None
             else:
                 if child2 not in cluster_contents:
-                    print(f"警告: クラスタID {child2} が見つかりません。スキップします。")
+                    print(
+                        f"警告: クラスタID {child2} が見つかりません。スキップします。"
+                    )
                     continue
-                    
+
                 cluster_indices = cluster_contents[child2]
                 cluster_size = len(cluster_indices)
-                
+
                 if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(range(len(cluster_indices)), embeddings[cluster_indices])
+                    local_idx1, local_idx2, _ = find_farthest_pair(
+                        range(len(cluster_indices)), embeddings[cluster_indices]
+                    )
                     representative_idx = cluster_indices[local_idx1]
                     text2 = comments[representative_idx]
                     text2_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child2,
-                        'cluster_size': cluster_size
+                        "text_id": representative_idx,
+                        "cluster_id": child2,
+                        "cluster_size": cluster_size,
                     }
                 else:
                     representative_idx = cluster_indices[0]
                     text2 = comments[representative_idx]
                     text2_info = {
-                        'text_id': representative_idx,
-                        'cluster_id': child2,
-                        'cluster_size': cluster_size
+                        "text_id": representative_idx,
+                        "cluster_id": child2,
+                        "cluster_size": cluster_size,
                     }
                 id2 = child2
         except KeyError as e:
@@ -276,200 +332,156 @@ def extract_merge_info(children: np.ndarray, distances: np.ndarray, comments: Li
         except Exception as e:
             print(f"警告: 併合 #{i} の処理中にエラーが発生しました: {e}")
             continue
-        
-        merges.append({
-            'index': i,
-            'id1': id1,
-            'id2': id2,
-            'text1': text1,
-            'text2': text2,
-            'text1_info': text1_info,
-            'text2_info': text2_info,
-            'distance': distance
-        })
-        
+
+        merges.append(
+            {
+                "index": i,
+                "id1": id1,
+                "id2": id2,
+                "text1": text1,
+                "text2": text2,
+                "text1_info": text1_info,
+                "text2_info": text2_info,
+                "distance": distance,
+            }
+        )
+
         new_cluster_id = len(comments) + i
-        cluster_contents[new_cluster_id] = cluster_contents[child1] + cluster_contents[child2]
-    
+        cluster_contents[new_cluster_id] = (
+            cluster_contents[child1] + cluster_contents[child2]
+        )
+
     return merges
 
-def save_merge_info(merges: List[Dict[str, Any]], comments: List[str], output_dir: str) -> None:
+
+def save_merge_info(
+    merges: List[Dict[str, Any]], comments: List[str], output_dir: str
+) -> None:
     """クラスタ併合情報をMarkdownファイルとして保存する"""
     print("クラスタ併合情報をMarkdownファイルとして保存中...")
-    
+
     # 出力ディレクトリを作成
     os.makedirs(output_dir, exist_ok=True)
-    
-    with open(f"{output_dir}/cluster_merges.md", 'w', encoding='utf-8') as f:
+
+    with open(f"{output_dir}/cluster_merges.md", "w", encoding="utf-8") as f:
         f.write(f"# クラスタ併合情報（最初の{len(merges)}件）\n\n")
         for merge in merges:
-            new_cluster_id = len(comments) + merge['index']
-            f.write(f"## 併合 #{merge['index'] + 1} （距離: {merge['distance']:.6f}）\n\n")
+            new_cluster_id = len(comments) + merge["index"]
+            f.write(
+                f"## 併合 #{merge['index'] + 1} （距離: {merge['distance']:.6f}）\n\n"
+            )
             f.write(f"**作成されたクラスタID**: {new_cluster_id}\n\n")
-            
-            if merge['id1'] < len(comments):
+
+            if merge["id1"] < len(comments):
                 f.write(f"### テキスト1 (ID: {merge['id1']})\n\n")
                 f.write(f"{merge['text1']}\n\n")
             else:
-                text1_info = merge['text1_info']
-                f.write(f"### テキスト{text1_info['text_id']}(ID: {text1_info['text_id']}) from クラスタ1 (ID: {merge['id1']}, サイズ{text1_info['cluster_size']})\n\n")
+                text1_info = merge["text1_info"]
+                f.write(
+                    f"### テキスト{text1_info['text_id']}(ID: {text1_info['text_id']}) from クラスタ1 (ID: {merge['id1']}, サイズ{text1_info['cluster_size']})\n\n"
+                )
                 f.write(f"{merge['text1']}\n\n")
-            
-            if merge['id2'] < len(comments):
+
+            if merge["id2"] < len(comments):
                 f.write(f"### テキスト2 (ID: {merge['id2']})\n\n")
                 f.write(f"{merge['text2']}\n\n")
             else:
-                text2_info = merge['text2_info']
-                f.write(f"### テキスト{text2_info['text_id']}(ID: {text2_info['text_id']}) from クラスタ2 (ID: {merge['id2']}, サイズ{text2_info['cluster_size']})\n\n")
+                text2_info = merge["text2_info"]
+                f.write(
+                    f"### テキスト{text2_info['text_id']}(ID: {text2_info['text_id']}) from クラスタ2 (ID: {merge['id2']}, サイズ{text2_info['cluster_size']})\n\n"
+                )
                 f.write(f"{merge['text2']}\n\n")
-            
-            if merge['id1'] < len(comments) and merge['id2'] < len(comments):
-                similarity = calculate_similarity_percentage(merge['text1'], merge['text2'])
-                diff = generate_html_diff(merge['text1'], merge['text2'])
+
+            if merge["id1"] < len(comments) and merge["id2"] < len(comments):
+                similarity = calculate_similarity_percentage(
+                    merge["text1"], merge["text2"]
+                )
+                diff = generate_html_diff(merge["text1"], merge["text2"])
                 f.write(f"### 類似度: {similarity:.2f}%\n\n")
                 f.write(f"### 差分\n\n```html\n{diff}\n```\n\n")
-            
+
             f.write("---\n\n")
-        
+
         import pandas as pd
+
         df = pd.DataFrame(merges)
         # text1_info と text2_info は複雑なオブジェクトなのでCSVに保存する前に削除
         df_csv = df.copy()
-        if 'text1_info' in df_csv.columns:
-            df_csv = df_csv.drop(columns=['text1_info', 'text2_info'])
-        df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding='utf-8')
+        if "text1_info" in df_csv.columns:
+            df_csv = df_csv.drop(columns=["text1_info", "text2_info"])
+        df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding="utf-8")
 
-def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], ids: List[int], 
-                        embeddings: np.ndarray, merges: List[Dict[str, Any]], output_dir: str,
-                        duplicates: Dict[str, List[int]] = None) -> None:
+
+def build_display_id(id_value, id_mapping=None):
+    """IDの表示形式を「<ID>他n件」の形式に変換する"""
+    if not id_mapping or id_value not in id_mapping:
+        return f"ID: {id_value}"
+
+    ids = id_mapping[id_value]
+    if len(ids) == 1:
+        return f"ID: {ids[0]}"
+    else:
+        return f"ID: {ids[0]}他{len(ids) - 1}件"
+
+
+def build_display_text1(merge, id_mapping, total_comments):
+    """テキスト1の表示テキストを生成する"""
+    if merge["id1"] < total_comments:
+        return f"テキスト1 ({build_display_id(merge['id1'], id_mapping)})"
+    else:
+        tid = merge["text1_info"]["text_id"]
+        return f"テキスト{tid}({build_display_id(tid, id_mapping)}) from クラスタ1 (ID: {merge['id1']}, サイズ{merge['text1_info']['cluster_size']})"
+
+
+def build_display_text2(merge, id_mapping, total_comments):
+    """テキスト2の表示テキストを生成する"""
+    if merge["id2"] < total_comments:
+        return f"テキスト2 ({build_display_id(merge['id2'], id_mapping)})"
+    else:
+        tid = merge["text2_info"]["text_id"]
+        return f"テキスト{tid}({build_display_id(tid, id_mapping)}) from クラスタ2 (ID: {merge['id2']}, サイズ{merge['text2_info']['cluster_size']})"
+
+
+def generate_html_report(
+    clusters: Dict[str, List[int]],
+    comments: List[str],
+    ids: List[int],
+    embeddings: np.ndarray,
+    merges: List[Dict[str, Any]],
+    output_dir: str,
+    duplicates: Dict[str, List[int]] = None,
+) -> None:
     """HTML形式のレポートを生成する"""
     print("Generating HTML report...")
-    
+
     merge_similarities = []
     merge_diffs = []
     for merge in merges:
-        similarity = calculate_similarity_percentage(merge['text1'], merge['text2'])
-        diff = generate_html_diff(merge['text1'], merge['text2'])
+        similarity = calculate_similarity_percentage(merge["text1"], merge["text2"])
+        diff = generate_html_diff(merge["text1"], merge["text2"])
         merge_similarities.append(similarity)
         merge_diffs.append(diff)
-    
-    # Jinja2テンプレート環境を設定
-    template_str = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>クラスタリング結果</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1 { color: #333; }
-            h2 { color: #555; margin-top: 30px; }
-            h3 { color: #666; }
-            .cluster { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
-            .comment { margin-bottom: 20px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
-            .comment-id { font-weight: bold; margin-bottom: 5px; }
-            .comment-text { white-space: pre-wrap; }
-            .diff-container { margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px; }
-            .diff-title { font-weight: bold; margin-bottom: 10px; }
-            .diff { white-space: pre-wrap; font-family: monospace; }
-            .common { color: black; }
-            .removed { color: red; text-decoration: line-through; }
-            .added { color: green; }
-            .similarity { font-weight: bold; color: #0066cc; }
-            .summary { margin-bottom: 20px; padding: 10px; background-color: #eef; border-radius: 3px; }
-            .merge-process { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #f5f5f5; }
-            .merge-item { margin-bottom: 20px; padding: 10px; background-color: #fff; border-radius: 3px; border-left: 4px solid #0066cc; }
-            .merge-title { font-weight: bold; margin-bottom: 10px; color: #0066cc; }
-            .merge-texts { display: flex; gap: 20px; }
-            .merge-text { flex: 1; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
-            .merge-diff { margin-top: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 3px; }
-            .duplicates { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #fff8e1; }
-            .duplicate-item { margin-bottom: 10px; padding: 5px; background-color: #fffde7; border-radius: 3px; }
-        </style>
-    </head>
-    <body>
-        <h1>クラスタリング結果</h1>
-        
-        <div class="summary">
-            <p>総クラスタ数: {{ clusters|length }}</p>
-            <p>総コメント数: {{ total_comments }}</p>
-            <p>クラスタサイズ分布:</p>
-            <ul>
-                {% for size, count in cluster_sizes.items() %}
-                <li>{{ size }}件のクラスタ: {{ count }}個</li>
-                {% endfor %}
-            </ul>
-        </div>
-        
-        {% if duplicates and duplicates|length > 0 %}
-        <h2>完全一致のコメント</h2>
-        <div class="duplicates">
-            <p>完全に同一内容のコメント: {{ duplicates|length }}種類</p>
-            <ul>
-                {% for comment, indices in duplicates.items() %}
-                <li class="duplicate-item">
-                    ID {{ ids_str[loop.index0] }}は同一内容が{{ indices|length }}件あった
-                    <div class="comment-text">{{ comment }}</div>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        
-        <h2>クラスタ併合過程</h2>
-        <div class="merge-process">
-            <p>閾値に至るまでの併合過程を表示しています（最初の{{ merges|length }}件）</p>
-            
-            {% for merge in merges %}
-            <div class="merge-item">
-                <div class="merge-title">併合 #{{ merge.index + 1 }} （距離: {{ "%.6f"|format(merge.distance) }}）</div>
-                
-                <div class="merge-texts">
-                    <div class="merge-text">
-                        <h3>{% if merge.id1 < total_comments %}テキスト1 (ID: {{ merge.id1 }}){% else %}テキスト{{ merge.text1_info.text_id }}(ID: {{ merge.text1_info.text_id }}) from クラスタ1 (ID: {{ merge.id1 }}, サイズ{{ merge.text1_info.cluster_size }}){% endif %}</h3>
-                        <div>{{ merge.text1 }}</div>
-                    </div>
-                    
-                    <div class="merge-text">
-                        <h3>{% if merge.id2 < total_comments %}テキスト2 (ID: {{ merge.id2 }}){% else %}テキスト{{ merge.text2_info.text_id }}(ID: {{ merge.text2_info.text_id }}) from クラスタ2 (ID: {{ merge.id2 }}, サイズ{{ merge.text2_info.cluster_size }}){% endif %}</h3>
-                        <div>{{ merge.text2 }}</div>
-                    </div>
-                </div>
-                
-                <div class="merge-diff">
-                    <h3>類似度: {{ "%.2f"|format(merge_similarities[loop.index0]) }}%</h3>
-                    <div class="diff">{{ merge_diffs[loop.index0]|safe }}</div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        
-        <h2>最終クラスタリング結果</h2>
-        {% for cluster_id, cluster_data in cluster_results.items() %}
-        <div class="cluster">
-            <h2>クラスタ #{{ cluster_id }} ({{ cluster_data.indices|length }}件)</h2>
-            
-            {% if cluster_data.indices|length >= 2 %}
-            <div class="diff-container">
-                <div class="diff-title">クラスタ内の最も遠いペア (距離: {{ "%.4f"|format(cluster_data.max_distance) }}, 類似度: {{ "%.2f"|format(cluster_data.similarity) }}%)</div>
-                <div class="diff">{{ cluster_data.diff|safe }}</div>
-            </div>
-            {% endif %}
-            
-            {% for idx in cluster_data.indices %}
-            <div class="comment">
-                <div class="comment-id">ID: {{ ids[idx] }}</div>
-                <div class="comment-text">{{ comments[idx] }}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endfor %}
-    </body>
-    </html>
-    """
-    
-    template = jinja2.Template(template_str)
-    
+
+    id_mapping = {}
+    if duplicates:
+        for comment, duplicate_ids in duplicates.items():
+            for id_val in duplicate_ids:
+                if id_val not in id_mapping:
+                    id_mapping[id_val] = []
+                id_mapping[id_val].extend(duplicate_ids)
+
+    for merge in merges:
+        merge["display_h3_1"] = build_display_text1(merge, id_mapping, len(comments))
+        merge["display_h3_2"] = build_display_text2(merge, id_mapping, len(comments))
+
+    # Jinja2テンプレートを読み込む
+    template_path = os.path.join(
+        os.path.dirname(__file__), "templates/clustering_report.html"
+    )
+    template_loader = jinja2.FileSystemLoader(os.path.dirname(template_path))
+    template_env = jinja2.Environment(loader=template_loader)
+    template = template_env.get_template(os.path.basename(template_path))
+
     # クラスタサイズの分布を計算
     cluster_sizes = {}
     for indices in clusters.values():
@@ -477,7 +489,7 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
         if size not in cluster_sizes:
             cluster_sizes[size] = 0
         cluster_sizes[size] += 1
-    
+
     # クラスタごとの結果を準備
     cluster_results = {}
     for cluster_id, indices in clusters.items():
@@ -489,19 +501,23 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
             max_distance = 0
             similarity = 100
             diff = ""
-        
+
         cluster_results[cluster_id] = {
             "indices": indices,
             "max_distance": max_distance,
             "similarity": similarity,
-            "diff": diff
+            "diff": diff,
         }
-    
+
     ids_str = []
     if duplicates:
         for comment, indices in duplicates.items():
-            ids_str.append(", ".join([str(idx) for idx in indices]))
-    
+            first_id = indices[0] if indices else ""
+            if len(indices) > 1:
+                ids_str.append(f"{first_id}他{len(indices) - 1}件")
+            else:
+                ids_str.append(str(first_id))
+
     # HTMLを生成
     html = template.render(
         clusters=clusters,
@@ -514,52 +530,60 @@ def generate_html_report(clusters: Dict[str, List[int]], comments: List[str], id
         merge_similarities=merge_similarities,
         merge_diffs=merge_diffs,
         duplicates=duplicates,
-        ids_str=ids_str
+        ids_str=ids_str,
     )
-    
+
     # 出力ディレクトリを作成
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # HTMLファイルを保存
-    with open(f"{output_dir}/clustering_report.html", 'w', encoding='utf-8') as f:
+    with open(f"{output_dir}/clustering_report.html", "w", encoding="utf-8") as f:
         f.write(html)
-    
+
     # クラスタリング結果をJSONとしても保存
     results = {
         "comments": comments,
         "ids": ids,
         "labels": [int(label) for label in list(map(str, clusters.keys()))],
         "clusters": clusters,
-        "duplicates": duplicates if duplicates else {}
+        "duplicates": duplicates if duplicates else {},
     }
-    
-    with open(f"{output_dir}/clusters.json", 'w', encoding='utf-8') as f:
+
+    with open(f"{output_dir}/clusters.json", "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
+
 
 def main():
     args = parse_args()
-    
+
     all_comments, all_ids = load_data(args.input)
-    
+
     unique_comments, unique_ids, duplicates = remove_duplicates(all_comments, all_ids)
-    
+
     comments, ids = get_limited_data(unique_comments, unique_ids, args.limit)
-    
+
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
-    
+
     # クラスタリングを実行
-    labels, clusters, distances, children = perform_clustering(embeddings, args.threshold)
-    
-    merges = extract_merge_info(children, distances, comments, embeddings, max_merges=1000)
-    
+    labels, clusters, distances, children = perform_clustering(
+        embeddings, args.threshold
+    )
+
+    merges = extract_merge_info(
+        children, distances, comments, embeddings, max_merges=1000
+    )
+
     save_merge_info(merges, comments, args.output)
-    
+
     # HTMLレポートを生成
-    generate_html_report(clusters, comments, ids, embeddings, merges, args.output, duplicates)
-    
+    generate_html_report(
+        clusters, comments, ids, embeddings, merges, args.output, duplicates
+    )
+
     print("Processing completed successfully!")
     print(f"Results saved to {args.output}")
+
 
 if __name__ == "__main__":
     main()
