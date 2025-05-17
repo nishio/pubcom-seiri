@@ -26,6 +26,19 @@ from typing import List, Dict, Tuple, Any, Optional
 import jinja2
 
 
+def select_column(row):
+    "return (id, comment)"
+    # aipubcom
+    # comment = row[0]
+    # id_val = int(row[1])
+
+    # ene
+    comment = row[2]
+    id_val = int(row[0])
+
+    return (id_val, comment)
+
+
 def parse_args():
     """コマンドライン引数をパースする"""
     parser = argparse.ArgumentParser(
@@ -67,9 +80,9 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
 
         for i, row in enumerate(rows):
             if len(row) >= 1:  # コメント列があることを確認
+                id_val, comment = select_column(row)
                 # 改行を空白を入れずに結合
-                comment = "".join(row[0].splitlines())
-                id_val = int(row[1]) if len(row) >= 2 and row[1].isdigit() else i
+                comment = "".join(comment.splitlines())
                 comments.append(comment)
                 ids.append(id_val)
 
