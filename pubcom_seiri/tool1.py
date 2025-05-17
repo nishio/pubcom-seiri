@@ -92,12 +92,13 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
 
 def remove_duplicates(
     comments: List[str], ids: List[int]
-) -> Tuple[List[str], List[int], Dict[str, List[int]]]:
+) -> Tuple[List[str], List[int], Dict[str, List[int]], Dict[int, List[int]]]:
     """重複を検出して除去する"""
     print("Removing duplicates...")
     unique_comments = []
     unique_ids = []
     duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
+    id_mapping = {}     # インデックスをキーに、元のCSV IDのリストを値とする辞書
 
     for i, comment in enumerate(comments):
         if comment in duplicate_map:
@@ -106,6 +107,10 @@ def remove_duplicates(
             duplicate_map[comment] = [ids[i]]
             unique_comments.append(comment)
             unique_ids.append(ids[i])
+            id_mapping[len(unique_comments) - 1] = [ids[i]]  # 新しいインデックスに対応するIDを記録
+
+    for i, comment in enumerate(unique_comments):
+        id_mapping[i] = duplicate_map[comment]  # 元のCSV IDのリストを保存
 
     duplicates = {
         comment: id_list
@@ -115,23 +120,32 @@ def remove_duplicates(
 
     print(f"Found {len(duplicates)} duplicate comment types.")
     print(f"Reduced to {len(unique_comments)} unique comments.")
-    return unique_comments, unique_ids, duplicates
+    return unique_comments, unique_ids, duplicates, id_mapping
 
 
 def get_limited_data(
-    comments: List[str], ids: List[int], limit: int = 10000
-) -> Tuple[List[str], List[int]]:
+    comments: List[str], ids: List[int], id_mapping: Dict[int, List[int]] = None, limit: int = 10000
+) -> Tuple[List[str], List[int], Dict[int, List[int]]]:
     """除去済みのデータからN件を取得する"""
     print(f"Getting last {limit} comments...")
     if limit < len(comments):
         limited_comments = comments[-limit:]
         limited_ids = ids[-limit:]
+        if id_mapping:
+            limited_id_mapping = {}
+            for i in range(len(limited_comments)):
+                original_idx = len(comments) - limit + i
+                limited_id_mapping[i] = id_mapping[original_idx]
+        else:
+            limited_id_mapping = None
     else:
         limited_comments = comments
         limited_ids = ids
+        limited_id_mapping = id_mapping
 
     print(f"Selected {len(limited_comments)} comments for analysis.")
-    return limited_comments, limited_ids
+    return limited_comments, limited_ids, limited_id_mapping
+
 
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
@@ -252,74 +266,99 @@ def extract_merge_info(
     else:
         print(f"近い順に併合される最初の{max_merges}件のクラスタ情報を抽出中...")
         max_items = min(max_merges, len(distances))
+    merges = []
 
     cluster_contents = {}
     for i in range(len(comments)):
         cluster_contents[i] = [i]
 
-    merges = []
-    for i, (child1, child2) in enumerate(children):
-        child1 = int(child1)
-        child2 = int(child2)
-        distance = float(distances[i])
+    sorted_indices = np.argsort(distances)
+    sorted_children = children[sorted_indices]
+    sorted_distances = distances[sorted_indices]
 
-        if child1 < len(comments):
-            text1 = comments[child1]
-            id1 = child1
-            text1_info = None
-        else:
-            cluster_indices = cluster_contents[child1]
-            cluster_size = len(cluster_indices)
+    for i in range(max_items):
+        try:
+            child1, child2 = sorted_children[i]
+            distance = sorted_distances[i]
 
-            if cluster_size >= 2:
-                local_idx1, local_idx2, _ = find_farthest_pair(
-                    range(len(cluster_indices)), embeddings[cluster_indices]
-                )
-                representative_idx = cluster_indices[local_idx1]
-                text1 = comments[representative_idx]
-                text1_info = {
-                    "text_id": representative_idx,
-                    "cluster_id": child1,
-                    "cluster_size": cluster_size,
-                }
+            child1 = int(child1)
+            child2 = int(child2)
+
+            if child1 < len(comments):
+                text1 = comments[child1]
+                id1 = child1
+                text1_info = None
             else:
-                representative_idx = cluster_indices[0]
-                text1 = comments[representative_idx]
-                text1_info = {
-                    "text_id": representative_idx,
-                    "cluster_id": child1,
-                    "cluster_size": cluster_size,
-                }
-            id1 = child1
+                if child1 not in cluster_contents:
+                    print(
+                        f"警告: クラスタID {child1} が見つかりません。スキップします。"
+                    )
+                    continue
 
-        if child2 < len(comments):
-            text2 = comments[child2]
-            id2 = child2
-            text2_info = None
-        else:
-            cluster_indices = cluster_contents[child2]
-            cluster_size = len(cluster_indices)
+                cluster_indices = cluster_contents[child1]
+                cluster_size = len(cluster_indices)
 
-            if cluster_size >= 2:
-                local_idx1, local_idx2, _ = find_farthest_pair(
-                    range(len(cluster_indices)), embeddings[cluster_indices]
-                )
-                representative_idx = cluster_indices[local_idx1]
-                text2 = comments[representative_idx]
-                text2_info = {
-                    "text_id": representative_idx,
-                    "cluster_id": child2,
-                    "cluster_size": cluster_size,
-                }
+                if cluster_size >= 2:
+                    local_idx1, local_idx2, _ = find_farthest_pair(
+                        range(len(cluster_indices)), embeddings[cluster_indices]
+                    )
+                    representative_idx = cluster_indices[local_idx1]
+                    text1 = comments[representative_idx]
+                    text1_info = {
+                        "text_id": representative_idx,
+                        "cluster_id": child1,
+                        "cluster_size": cluster_size,
+                    }
+                else:
+                    representative_idx = cluster_indices[0]
+                    text1 = comments[representative_idx]
+                    text1_info = {
+                        "text_id": representative_idx,
+                        "cluster_id": child1,
+                        "cluster_size": cluster_size,
+                    }
+                id1 = child1
+
+            if child2 < len(comments):
+                text2 = comments[child2]
+                id2 = child2
+                text2_info = None
             else:
-                representative_idx = cluster_indices[0]
-                text2 = comments[representative_idx]
-                text2_info = {
-                    "text_id": representative_idx,
-                    "cluster_id": child2,
-                    "cluster_size": cluster_size,
-                }
-            id2 = child2
+                if child2 not in cluster_contents:
+                    print(
+                        f"警告: クラスタID {child2} が見つかりません。スキップします。"
+                    )
+                    continue
+
+                cluster_indices = cluster_contents[child2]
+                cluster_size = len(cluster_indices)
+
+                if cluster_size >= 2:
+                    local_idx1, local_idx2, _ = find_farthest_pair(
+                        range(len(cluster_indices)), embeddings[cluster_indices]
+                    )
+                    representative_idx = cluster_indices[local_idx1]
+                    text2 = comments[representative_idx]
+                    text2_info = {
+                        "text_id": representative_idx,
+                        "cluster_id": child2,
+                        "cluster_size": cluster_size,
+                    }
+                else:
+                    representative_idx = cluster_indices[0]
+                    text2 = comments[representative_idx]
+                    text2_info = {
+                        "text_id": representative_idx,
+                        "cluster_id": child2,
+                        "cluster_size": cluster_size,
+                    }
+                id2 = child2
+        except KeyError as e:
+            print(f"警告: 併合 #{i} の処理中にKeyErrorが発生しました: {e}")
+            continue
+        except Exception as e:
+            print(f"警告: 併合 #{i} の処理中にエラーが発生しました: {e}")
+            continue
 
         merges.append(
             {
@@ -339,11 +378,65 @@ def extract_merge_info(
             cluster_contents[child1] + cluster_contents[child2]
         )
 
-    merges_sorted = sorted(merges, key=lambda m: m["distance"])
-    if max_merges > 0:
-        merges_sorted = merges_sorted[:max_merges]
+    return merges
 
-    return merges_sorted
+
+def save_merge_info(
+    merges: List[Dict[str, Any]], comments: List[str], output_dir: str
+) -> None:
+    """クラスタ併合情報をMarkdownファイルとして保存する"""
+    print("クラスタ併合情報をMarkdownファイルとして保存中...")
+
+    # 出力ディレクトリを作成
+    os.makedirs(output_dir, exist_ok=True)
+
+    with open(f"{output_dir}/cluster_merges.md", "w", encoding="utf-8") as f:
+        f.write(f"# クラスタ併合情報（最初の{len(merges)}件）\n\n")
+        for merge in merges:
+            new_cluster_id = len(comments) + merge["index"]
+            f.write(
+                f"## 併合 #{merge['index'] + 1} （距離: {merge['distance']:.6f}）\n\n"
+            )
+            f.write(f"**作成されたクラスタID**: {new_cluster_id}\n\n")
+
+            if merge["id1"] < len(comments):
+                f.write(f"### テキスト1 (ID: {merge['id1']})\n\n")
+                f.write(f"{merge['text1']}\n\n")
+            else:
+                text1_info = merge["text1_info"]
+                f.write(
+                    f"### テキスト{text1_info['text_id']}(ID: {text1_info['text_id']}) from クラスタ1 (ID: {merge['id1']}, サイズ{text1_info['cluster_size']})\n\n"
+                )
+                f.write(f"{merge['text1']}\n\n")
+
+            if merge["id2"] < len(comments):
+                f.write(f"### テキスト2 (ID: {merge['id2']})\n\n")
+                f.write(f"{merge['text2']}\n\n")
+            else:
+                text2_info = merge["text2_info"]
+                f.write(
+                    f"### テキスト{text2_info['text_id']}(ID: {text2_info['text_id']}) from クラスタ2 (ID: {merge['id2']}, サイズ{text2_info['cluster_size']})\n\n"
+                )
+                f.write(f"{merge['text2']}\n\n")
+
+            if merge["id1"] < len(comments) and merge["id2"] < len(comments):
+                similarity = calculate_similarity_percentage(
+                    merge["text1"], merge["text2"]
+                )
+                diff = generate_html_diff(merge["text1"], merge["text2"])
+                f.write(f"### 類似度: {similarity:.2f}%\n\n")
+                f.write(f"### 差分\n\n```html\n{diff}\n```\n\n")
+
+            f.write("---\n\n")
+
+        import pandas as pd
+
+        df = pd.DataFrame(merges)
+        # text1_info と text2_info は複雑なオブジェクトなのでCSVに保存する前に削除
+        df_csv = df.copy()
+        if "text1_info" in df_csv.columns:
+            df_csv = df_csv.drop(columns=["text1_info", "text2_info"])
+        df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding="utf-8")
 
 
 def generate_html_report(
@@ -354,6 +447,7 @@ def generate_html_report(
     merges: List[Dict[str, Any]],
     output_dir: str,
     duplicates: Dict[str, List[int]] = None,
+    id_mapping: Dict[int, List[int]] = None,
 ) -> None:
     """HTML形式のレポートを生成する"""
     print("Generating HTML report...")
@@ -464,7 +558,13 @@ def generate_html_report(
             
             {% for idx in cluster_data.indices %}
             <div class="comment">
-                <div class="comment-id">ID: {{ ids[idx] }}</div>
+                <div class="comment-id">
+                    {% if id_mapping and idx in id_mapping %}
+                        CSV ID: {{ id_mapping[idx]|join(', ') }}
+                    {% else %}
+                        ID: {{ ids[idx] }}
+                    {% endif %}
+                </div>
                 <div class="comment-text">{{ comments[idx] }}</div>
             </div>
             {% endfor %}
@@ -548,9 +648,9 @@ def main():
 
     all_comments, all_ids = load_data(args.input)
 
-    unique_comments, unique_ids, duplicates = remove_duplicates(all_comments, all_ids)
+    unique_comments, unique_ids, duplicates, id_mapping = remove_duplicates(all_comments, all_ids)
 
-    comments, ids = get_limited_data(unique_comments, unique_ids, args.limit)
+    comments, ids, id_mapping = get_limited_data(unique_comments, unique_ids, id_mapping, args.limit)
 
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
@@ -564,9 +664,11 @@ def main():
         children, distances, comments, embeddings, max_merges=1000
     )
 
+    save_merge_info(merges, comments, args.output)
+
     # HTMLレポートを生成
     generate_html_report(
-        clusters, comments, ids, embeddings, merges, args.output, duplicates
+        clusters, comments, ids, embeddings, merges, args.output, duplicates, id_mapping
     )
 
     print("Processing completed successfully!")
