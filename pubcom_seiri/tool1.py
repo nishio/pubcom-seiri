@@ -270,17 +270,25 @@ def extract_merge_info(
     merges = []
 
     cluster_contents = {}
+    
     for i in range(len(comments)):
         cluster_contents[i] = [i]
-
-    sorted_indices = np.argsort(distances)
-    sorted_children = children[sorted_indices]
-    sorted_distances = distances[sorted_indices]
+    
+    all_possible_ids = set()
+    for child1, child2 in children:
+        all_possible_ids.add(int(child1))
+        all_possible_ids.add(int(child2))
+    
+    max_cluster_id = len(comments) + len(distances)
+    
+    for i in range(len(comments), max_cluster_id):
+        if i not in cluster_contents:
+            cluster_contents[i] = []
 
     for i in range(max_items):
         try:
-            child1, child2 = sorted_children[i]
-            distance = sorted_distances[i]
+            child1, child2 = children[i]
+            distance = distances[i]
 
             child1 = int(child1)
             child2 = int(child2)
@@ -291,18 +299,19 @@ def extract_merge_info(
                 text1_info = None
             else:
                 if child1 not in cluster_contents:
-                    print(
-                        f"警告: クラスタID {child1} が見つかりません。スキップします。"
-                    )
-                    continue
+                    cluster_contents[child1] = []
 
                 cluster_indices = cluster_contents[child1]
                 cluster_size = len(cluster_indices)
 
                 if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(
-                        range(len(cluster_indices)), embeddings[cluster_indices]
-                    )
+                    try:
+                        local_idx1, local_idx2, _ = find_farthest_pair(
+                            range(len(cluster_indices)), embeddings[cluster_indices]
+                        )
+                    except Exception as e:
+                        print(f"警告: クラスタ {child1} の処理中にエラーが発生しました: {e}")
+                        local_idx1 = 0
                     representative_idx = cluster_indices[local_idx1]
                     text1 = comments[representative_idx]
                     text1_info = {
@@ -326,18 +335,19 @@ def extract_merge_info(
                 text2_info = None
             else:
                 if child2 not in cluster_contents:
-                    print(
-                        f"警告: クラスタID {child2} が見つかりません。スキップします。"
-                    )
-                    continue
+                    cluster_contents[child2] = []
 
                 cluster_indices = cluster_contents[child2]
                 cluster_size = len(cluster_indices)
 
                 if cluster_size >= 2:
-                    local_idx1, local_idx2, _ = find_farthest_pair(
-                        range(len(cluster_indices)), embeddings[cluster_indices]
-                    )
+                    try:
+                        local_idx1, local_idx2, _ = find_farthest_pair(
+                            range(len(cluster_indices)), embeddings[cluster_indices]
+                        )
+                    except Exception as e:
+                        print(f"警告: クラスタ {child2} の処理中にエラーが発生しました: {e}")
+                        local_idx1 = 0
                     representative_idx = cluster_indices[local_idx1]
                     text2 = comments[representative_idx]
                     text2_info = {
