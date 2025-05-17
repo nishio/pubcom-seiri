@@ -37,6 +37,8 @@ def select_column(row):
     id_val = int(row[0])
 
     return (id_val, comment)
+
+
 def parse_args():
     """コマンドライン引数をパースする"""
     parser = argparse.ArgumentParser(
@@ -91,13 +93,12 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
 def remove_duplicates(
     comments: List[str], ids: List[int]
 ) -> Tuple[List[str], List[int], Dict[str, List[int]], Dict[int, List[int]]]:
-
     """重複を検出して除去する"""
     print("Removing duplicates...")
     unique_comments = []
     unique_ids = []
     duplicate_map = {}  # コメント内容をキーに、IDのリストを値とする辞書
-    id_mapping = {}     # インデックスをキーに、元のCSV IDのリストを値とする辞書
+    id_mapping = {}  # インデックスをキーに、元のCSV IDのリストを値とする辞書
     for i, comment in enumerate(comments):
         if comment in duplicate_map:
             duplicate_map[comment].append(ids[i])
@@ -105,7 +106,9 @@ def remove_duplicates(
             duplicate_map[comment] = [ids[i]]
             unique_comments.append(comment)
             unique_ids.append(ids[i])
-            id_mapping[len(unique_comments) - 1] = [ids[i]]  # 新しいインデックスに対応するIDを記録
+            id_mapping[len(unique_comments) - 1] = [
+                ids[i]
+            ]  # 新しいインデックスに対応するIDを記録
 
     for i, comment in enumerate(unique_comments):
         id_mapping[i] = duplicate_map[comment]  # 元のCSV IDのリストを保存
@@ -121,9 +124,11 @@ def remove_duplicates(
 
 
 def get_limited_data(
-    comments: List[str], ids: List[int], id_mapping: Dict[int, List[int]] = None, limit: int = 10000
+    comments: List[str],
+    ids: List[int],
+    id_mapping: Dict[int, List[int]] = None,
+    limit: int = 10000,
 ) -> Tuple[List[str], List[int], Dict[int, List[int]]]:
-
     """除去済みのデータからN件を取得する"""
     print(f"Getting last {limit} comments...")
     if limit < len(comments):
@@ -142,9 +147,6 @@ def get_limited_data(
         limited_id_mapping = id_mapping
     print(f"Selected {len(limited_comments)} comments for analysis.")
     return limited_comments, limited_ids, limited_id_mapping
-
-
-
 
 
 def create_embeddings(comments: List[str], model_name: str) -> np.ndarray:
@@ -269,17 +271,17 @@ def extract_merge_info(
     merges = []
 
     cluster_contents = {}
-    
+
     for i in range(len(comments)):
         cluster_contents[i] = [i]
-    
+
     all_possible_ids = set()
     for child1, child2 in children:
         all_possible_ids.add(int(child1))
         all_possible_ids.add(int(child2))
-    
+
     max_cluster_id = len(comments) + len(distances)
-    
+
     for i in range(len(comments), max_cluster_id):
         if i not in cluster_contents:
             cluster_contents[i] = []
@@ -306,7 +308,9 @@ def extract_merge_info(
                             range(len(cluster_indices)), embeddings[cluster_indices]
                         )
                     except Exception as e:
-                        print(f"警告: クラスタ {child1} の処理中にエラーが発生しました: {e}")
+                        print(
+                            f"警告: クラスタ {child1} の処理中にエラーが発生しました: {e}"
+                        )
                         local_idx1 = 0
                     representative_idx = cluster_indices[local_idx1]
                     text1 = comments[representative_idx]
@@ -341,7 +345,9 @@ def extract_merge_info(
                             range(len(cluster_indices)), embeddings[cluster_indices]
                         )
                     except Exception as e:
-                        print(f"警告: クラスタ {child2} の処理中にエラーが発生しました: {e}")
+                        print(
+                            f"警告: クラスタ {child2} の処理中にエラーが発生しました: {e}"
+                        )
                         local_idx1 = 0
                     representative_idx = cluster_indices[local_idx1]
                     text2 = comments[representative_idx]
@@ -499,7 +505,7 @@ def generate_html_report(
     # id_mappingの処理
     if id_mapping is None:
         id_mapping = {}
-    
+
     if duplicates:
         for comment, duplicate_ids in duplicates.items():
             for id_val in duplicate_ids:
@@ -522,7 +528,7 @@ def generate_html_report(
     # id_mappingの処理
     if id_mapping is None:
         id_mapping = {}
-    
+
     if duplicates:
         for comment, duplicate_ids in duplicates.items():
             for id_val in duplicate_ids:
@@ -573,7 +579,7 @@ def generate_html_report(
     if duplicates:
         sorted_items = sorted(duplicates.items(), key=lambda x: len(x[1]), reverse=True)
         sorted_duplicates = dict(sorted_items)
-        
+
         for comment, indices in sorted_duplicates.items():
             first_id = indices[0] if indices else ""
             if len(indices) > 1:
@@ -621,9 +627,13 @@ def main():
 
     all_comments, all_ids = load_data(args.input)
 
-    unique_comments, unique_ids, duplicates, id_mapping = remove_duplicates(all_comments, all_ids)
+    unique_comments, unique_ids, duplicates, id_mapping = remove_duplicates(
+        all_comments, all_ids
+    )
 
-    comments, ids, id_mapping = get_limited_data(unique_comments, unique_ids, id_mapping, args.limit)
+    comments, ids, id_mapping = get_limited_data(
+        unique_comments, unique_ids, id_mapping, args.limit
+    )
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
 
@@ -633,7 +643,12 @@ def main():
     )
 
     merges = extract_merge_info(
-        children, distances, comments, embeddings, max_merges=1000, id_mapping=id_mapping
+        children,
+        distances,
+        comments,
+        embeddings,
+        max_merges=1000,
+        id_mapping=id_mapping,
     )
     save_merge_info(merges, comments, args.output)
 
