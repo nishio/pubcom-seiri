@@ -404,14 +404,7 @@ def generate_html_report(
         <h1>クラスタリング結果</h1>
         
         <div class="summary">
-            <p>総クラスタ数: {{ clusters|length }}</p>
             <p>総コメント数: {{ total_comments }}</p>
-            <p>クラスタサイズ分布:</p>
-            <ul>
-                {% for size, count in cluster_sizes.items() %}
-                <li>{{ size }}件のクラスタ: {{ count }}個</li>
-                {% endfor %}
-            </ul>
         </div>
         
         {% if duplicates and duplicates|length > 0 %}
