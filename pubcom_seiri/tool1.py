@@ -270,8 +270,11 @@ def extract_merge_info(
     merges = []
 
     cluster_contents = {}
+    
     for i in range(len(comments)):
         cluster_contents[i] = [i]
+    
+    existing_cluster_ids = set(range(len(comments)))
 
     sorted_indices = np.argsort(distances)
     sorted_children = children[sorted_indices]
@@ -290,7 +293,7 @@ def extract_merge_info(
                 id1 = child1
                 text1_info = None
             else:
-                if child1 not in cluster_contents:
+                if child1 not in existing_cluster_ids:
                     print(
                         f"警告: クラスタID {child1} が見つかりません。スキップします。"
                     )
@@ -325,7 +328,7 @@ def extract_merge_info(
                 id2 = child2
                 text2_info = None
             else:
-                if child2 not in cluster_contents:
+                if child2 not in existing_cluster_ids:
                     print(
                         f"警告: クラスタID {child2} が見つかりません。スキップします。"
                     )
@@ -374,10 +377,12 @@ def extract_merge_info(
             }
         )
 
-        new_cluster_id = len(comments) + i
-        cluster_contents[new_cluster_id] = (
-            cluster_contents[child1] + cluster_contents[child2]
-        )
+        if child1 in cluster_contents and child2 in cluster_contents:
+            new_cluster_id = len(comments) + i
+            cluster_contents[new_cluster_id] = (
+                cluster_contents[child1] + cluster_contents[child2]
+            )
+            existing_cluster_ids.add(new_cluster_id)
 
     return merges
 
