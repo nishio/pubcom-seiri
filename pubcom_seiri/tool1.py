@@ -258,6 +258,7 @@ def extract_merge_info(
     comments: List[str],
     embeddings: np.ndarray,
     max_merges: int = -1,
+    id_mapping: Dict[int, List[int]] = None,  # id_mappingパラメータを追加
 ) -> List[Dict[str, Any]]:
     """クラスタ併合情報を抽出する"""
     if max_merges < 0:
@@ -662,7 +663,7 @@ def main():
     )
 
     merges = extract_merge_info(
-        children, distances, comments, embeddings, max_merges=1000
+        children, distances, comments, embeddings, max_merges=1000, id_mapping=id_mapping
     )
 
     save_merge_info(merges, comments, args.output)
