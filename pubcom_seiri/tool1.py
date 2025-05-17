@@ -526,12 +526,12 @@ def generate_html_report(
                 
                 <div class="merge-texts">
                     <div class="merge-text">
-                        <h3>{% if merge.id1 < total_comments %}テキスト1 (ID: {{ merge.id1 }}){% else %}テキスト{{ merge.text1_info.text_id }}(ID: {{ merge.text1_info.text_id }}) from クラスタ1 (ID: {{ merge.id1 }}, サイズ{{ merge.text1_info.cluster_size }}){% endif %}</h3>
+                        <h3>{% if merge.id1 < total_comments %}テキスト1 ({% if id_mapping and merge.id1 in id_mapping %}CSV ID: {{ id_mapping[merge.id1]|join(', ') }}{% else %}ID: {{ merge.id1 }}{% endif %}){% else %}テキスト{{ merge.text1_info.text_id }}({% if id_mapping and merge.text1_info.text_id in id_mapping %}CSV ID: {{ id_mapping[merge.text1_info.text_id]|join(', ') }}{% else %}ID: {{ merge.text1_info.text_id }}{% endif %}) from クラスタ1 (ID: {{ merge.id1 }}, サイズ{{ merge.text1_info.cluster_size }}){% endif %}</h3>
                         <div>{{ merge.text1 }}</div>
                     </div>
                     
                     <div class="merge-text">
-                        <h3>{% if merge.id2 < total_comments %}テキスト2 (ID: {{ merge.id2 }}){% else %}テキスト{{ merge.text2_info.text_id }}(ID: {{ merge.text2_info.text_id }}) from クラスタ2 (ID: {{ merge.id2 }}, サイズ{{ merge.text2_info.cluster_size }}){% endif %}</h3>
+                        <h3>{% if merge.id2 < total_comments %}テキスト2 ({% if id_mapping and merge.id2 in id_mapping %}CSV ID: {{ id_mapping[merge.id2]|join(', ') }}{% else %}ID: {{ merge.id2 }}{% endif %}){% else %}テキスト{{ merge.text2_info.text_id }}({% if id_mapping and merge.text2_info.text_id in id_mapping %}CSV ID: {{ id_mapping[merge.text2_info.text_id]|join(', ') }}{% else %}ID: {{ merge.text2_info.text_id }}{% endif %}) from クラスタ2 (ID: {{ merge.id2 }}, サイズ{{ merge.text2_info.cluster_size }}){% endif %}</h3>
                         <div>{{ merge.text2 }}</div>
                     </div>
                 </div>
@@ -621,6 +621,7 @@ def generate_html_report(
         merge_diffs=merge_diffs,
         duplicates=duplicates,
         ids_str=ids_str,
+        id_mapping=id_mapping,
     )
 
     # 出力ディレクトリを作成
