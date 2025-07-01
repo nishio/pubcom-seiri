@@ -76,6 +76,9 @@ def load_data(csv_path: str) -> Tuple[List[str], List[int]]:
     comments = []
     ids = []
 
+    # CSVフィールドサイズの制限を増やす
+    csv.field_size_limit(1000000)  # 1MB まで許可
+
     with open(csv_path, "r", encoding="utf-8") as file:
         reader = csv.reader(file, delimiter=",")
         next(reader)  # ヘッダーをスキップ
