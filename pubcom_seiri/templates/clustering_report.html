@@ -86,26 +86,5 @@
         </div>
         {% endfor %}
     </div>
-    
-    <h2>最終クラスタリング結果</h2>
-    {% for cluster_id, cluster_data in cluster_results.items() %}
-    <div class="cluster">
-        <h2>クラスタ #{{ cluster_id }} ({{ cluster_data.indices|length }}件)</h2>
-        
-        {% if cluster_data.indices|length >= 2 %}
-        <div class="diff-container">
-            <div class="diff-title">クラスタ内の最も遠いペア (距離: {{ "%.4f"|format(cluster_data.max_distance) }}, 類似度: {{ "%.2f"|format(cluster_data.similarity) }}%)</div>
-            <div class="diff">{{ cluster_data.diff|safe }}</div>
-        </div>
-        {% endif %}
-        
-        {% for idx in cluster_data.indices %}
-        <div class="comment">
-            <div class="comment-id">ID: {{ ids[idx] }}</div>
-            <div class="comment-text">{{ comments[idx] }}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endfor %}
 </body>
 </html>
