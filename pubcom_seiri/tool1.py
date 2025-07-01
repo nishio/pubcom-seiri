@@ -33,8 +33,12 @@ def select_column(row):
     # id_val = int(row[1])
 
     # ene
-    comment = row[2]
-    id_val = int(row[0])
+    # comment = row[2]
+    # id_val = int(row[0])
+
+    # kokkosho
+    id_val = int(row[0])  # 受付番号
+    comment = row[1]  # 提出意見
 
     return (id_val, comment)
 
