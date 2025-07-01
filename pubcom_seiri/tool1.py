@@ -451,6 +451,23 @@ def save_merge_info(
         df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding="utf-8")
 
 
+def save_merge_distances_csv(merges: List[Dict[str, Any]], output_dir: str) -> None:
+    """併合距離のみをCSVファイルとして保存する"""
+    print("併合距離をCSVファイルとして保存中...")
+
+    import pandas as pd
+
+    distance_data = []
+    for merge in merges:
+        distance_data.append(
+            {"merge_index": merge["index"], "distance": merge["distance"]}
+        )
+
+    df = pd.DataFrame(distance_data)
+    df.to_csv(f"{output_dir}/merge_distances.csv", index=False, encoding="utf-8")
+    print(f"併合距離を {output_dir}/merge_distances.csv に保存しました")
+
+
 def build_display_id(id_value, id_mapping=None):
     """IDの表示形式を「<ID>他n件」の形式に変換する"""
     if not id_mapping or id_value not in id_mapping:
@@ -647,10 +664,11 @@ def main():
         distances,
         comments,
         embeddings,
-        max_merges=1000,
+        max_merges=-1,
         id_mapping=id_mapping,
     )
     save_merge_info(merges, comments, args.output)
+    save_merge_distances_csv(merges, args.output)
 
     # HTMLレポートを生成
     generate_html_report(
