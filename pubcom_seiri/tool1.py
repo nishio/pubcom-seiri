@@ -17,6 +17,7 @@ import csv
 import difflib
 import json
 import os
+import time
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cosine
@@ -659,18 +660,24 @@ def main():
     comments, ids, id_mapping = get_limited_data(
         unique_comments, unique_ids, id_mapping, args.limit
     )
-
-    comments, ids, id_mapping = get_limited_data(
-        unique_comments, unique_ids, id_mapping, args.limit
-    )
     # 埋め込みベクトルを生成
+    print("=== 埋め込みベクトル生成フェーズ開始 ===")
+    start_time = time.time()
     embeddings = create_embeddings(comments, args.model)
+    end_time = time.time()
+    print(f"埋め込みベクトル生成完了: {end_time - start_time:.2f}秒")
 
     # クラスタリングを実行
+    print("=== クラスタリングフェーズ開始 ===")
+    start_time = time.time()
     labels, clusters, distances, children = perform_clustering(
         embeddings, args.threshold
     )
+    end_time = time.time()
+    print(f"クラスタリング完了: {end_time - start_time:.2f}秒")
 
+    print("=== 併合過程抽出フェーズ開始 ===")
+    start_time = time.time()
     merges = extract_merge_info(
         children,
         distances,
@@ -679,6 +686,8 @@ def main():
         max_merges=-1,
         id_mapping=id_mapping,
     )
+    end_time = time.time()
+    print(f"併合過程抽出完了: {end_time - start_time:.2f}秒")
     save_merge_info(merges, comments, args.output)
     save_merge_distances_csv(merges, args.output)
 
