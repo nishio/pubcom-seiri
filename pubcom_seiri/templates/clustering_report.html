@@ -16,8 +16,8 @@
         .diff-title { font-weight: bold; margin-bottom: 10px; }
         .diff { white-space: pre-wrap; font-family: monospace; }
         .common { color: black; }
-        .removed { color: red; text-decoration: line-through; }
-        .added { color: green; }
+        .removed { color: red; background-color: #ffeeee; }
+        .added { color: green; background-color: #eeffee; }
         .similarity { font-weight: bold; color: #0066cc; }
         .summary { margin-bottom: 20px; padding: 10px; background-color: #eef; border-radius: 3px; }
         .merge-process { margin-bottom: 40px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background-color: #f5f5f5; }
@@ -86,26 +86,5 @@
         </div>
         {% endfor %}
     </div>
-    
-    <h2>最終クラスタリング結果</h2>
-    {% for cluster_id, cluster_data in cluster_results.items() %}
-    <div class="cluster">
-        <h2>クラスタ #{{ cluster_id }} ({{ cluster_data.indices|length }}件)</h2>
-        
-        {% if cluster_data.indices|length >= 2 %}
-        <div class="diff-container">
-            <div class="diff-title">クラスタ内の最も遠いペア (距離: {{ "%.4f"|format(cluster_data.max_distance) }}, 類似度: {{ "%.2f"|format(cluster_data.similarity) }}%)</div>
-            <div class="diff">{{ cluster_data.diff|safe }}</div>
-        </div>
-        {% endif %}
-        
-        {% for idx in cluster_data.indices %}
-        <div class="comment">
-            <div class="comment-id">ID: {{ ids[idx] }}</div>
-            <div class="comment-text">{{ comments[idx] }}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endfor %}
 </body>
 </html>

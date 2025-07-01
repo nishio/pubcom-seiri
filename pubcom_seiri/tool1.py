@@ -126,7 +126,6 @@ def remove_duplicates(
         for comment, id_list in duplicate_map.items()
         if len(id_list) > 1
     }
-
     print(f"Found {len(duplicates)} duplicate comment types.")
     print(f"Reduced to {len(unique_comments)} unique comments.")
     return unique_comments, unique_ids, duplicates, id_mapping
@@ -154,7 +153,6 @@ def get_limited_data(
         limited_comments = comments
         limited_ids = ids
         limited_id_mapping = id_mapping
-
     print(f"Selected {len(limited_comments)} comments for analysis.")
     return limited_comments, limited_ids, limited_id_mapping
 
@@ -295,12 +293,10 @@ def extract_merge_info(
     for i in range(len(comments), max_cluster_id):
         if i not in cluster_contents:
             cluster_contents[i] = []
-
     for i in range(max_items):
         try:
             child1, child2 = children[i]
             distance = distances[i]
-
             child1 = int(child1)
             child2 = int(child2)
 
@@ -311,7 +307,6 @@ def extract_merge_info(
             else:
                 if child1 not in cluster_contents:
                     cluster_contents[child1] = []
-
                 cluster_indices = cluster_contents[child1]
                 cluster_size = len(cluster_indices)
 
@@ -349,7 +344,6 @@ def extract_merge_info(
             else:
                 if child2 not in cluster_contents:
                     cluster_contents[child2] = []
-
                 cluster_indices = cluster_contents[child2]
                 cluster_size = len(cluster_indices)
 
@@ -465,6 +459,23 @@ def save_merge_info(
         df_csv.to_csv(f"{output_dir}/cluster_merges.csv", index=False, encoding="utf-8")
 
 
+def save_merge_distances_csv(merges: List[Dict[str, Any]], output_dir: str) -> None:
+    """併合距離のみをCSVファイルとして保存する"""
+    print("併合距離をCSVファイルとして保存中...")
+
+    import pandas as pd
+
+    distance_data = []
+    for merge in merges:
+        distance_data.append(
+            {"merge_index": merge["index"], "distance": merge["distance"]}
+        )
+
+    df = pd.DataFrame(distance_data)
+    df.to_csv(f"{output_dir}/merge_distances.csv", index=False, encoding="utf-8")
+    print(f"併合距離を {output_dir}/merge_distances.csv に保存しました")
+
+
 def build_display_id(id_value, id_mapping=None):
     """IDの表示形式を「<ID>他n件」の形式に変換する"""
     if not id_mapping or id_value not in id_mapping:
@@ -538,6 +549,29 @@ def generate_html_report(
     template_loader = jinja2.FileSystemLoader(os.path.dirname(template_path))
     template_env = jinja2.Environment(loader=template_loader)
     template = template_env.get_template(os.path.basename(template_path))
+
+    # id_mappingの処理
+    if id_mapping is None:
+        id_mapping = {}
+
+    if duplicates:
+        for comment, duplicate_ids in duplicates.items():
+            for id_val in duplicate_ids:
+                if id_val not in id_mapping:
+                    id_mapping[id_val] = []
+                id_mapping[id_val].extend(duplicate_ids)
+
+    for merge in merges:
+        merge["display_h3_1"] = build_display_text1(merge, id_mapping, len(comments))
+        merge["display_h3_2"] = build_display_text2(merge, id_mapping, len(comments))
+
+    # Jinja2テンプレートを読み込む
+    template_path = os.path.join(
+        os.path.dirname(__file__), "templates/clustering_report.html"
+    )
+    template_loader = jinja2.FileSystemLoader(os.path.dirname(template_path))
+    template_env = jinja2.Environment(loader=template_loader)
+    template = template_env.get_template(os.path.basename(template_path))
     # クラスタサイズの分布を計算
     cluster_sizes = {}
     for indices in clusters.values():
@@ -566,14 +600,17 @@ def generate_html_report(
         }
 
     ids_str = []
+    sorted_duplicates = {}
     if duplicates:
-        for comment, indices in duplicates.items():
+        sorted_items = sorted(duplicates.items(), key=lambda x: len(x[1]), reverse=True)
+        sorted_duplicates = dict(sorted_items)
+
+        for comment, indices in sorted_duplicates.items():
             first_id = indices[0] if indices else ""
             if len(indices) > 1:
                 ids_str.append(f"{first_id}他{len(indices) - 1}件")
             else:
                 ids_str.append(str(first_id))
-
     # HTMLを生成
     html = template.render(
         clusters=clusters,
@@ -585,7 +622,7 @@ def generate_html_report(
         merges=merges,
         merge_similarities=merge_similarities,
         merge_diffs=merge_diffs,
-        duplicates=duplicates,
+        duplicates=sorted_duplicates if duplicates else None,
         ids_str=ids_str,
         id_mapping=id_mapping,
     )
@@ -623,6 +660,9 @@ def main():
         unique_comments, unique_ids, id_mapping, args.limit
     )
 
+    comments, ids, id_mapping = get_limited_data(
+        unique_comments, unique_ids, id_mapping, args.limit
+    )
     # 埋め込みベクトルを生成
     embeddings = create_embeddings(comments, args.model)
 
@@ -636,17 +676,16 @@ def main():
         distances,
         comments,
         embeddings,
-        max_merges=1000,
+        max_merges=-1,
         id_mapping=id_mapping,
     )
-
     save_merge_info(merges, comments, args.output)
+    save_merge_distances_csv(merges, args.output)
 
     # HTMLレポートを生成
     generate_html_report(
         clusters, comments, ids, embeddings, merges, args.output, duplicates, id_mapping
     )
-
     print("Processing completed successfully!")
     print(f"Results saved to {args.output}")
 
